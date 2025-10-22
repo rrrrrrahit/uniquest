@@ -1,0 +1,29 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% block title %}Профиль{% endblock %}
+{% block content %}
+<h3>Редактировать профиль</h3>
+<div class="row">
+  <div class="col-md-6">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ u_form.as_p }}
+      {{ p_form.as_p }}
+      <button class="btn btn-primary">Сохранить</button>
+    </form>
+  </div>
+  <div class="col-md-6">
+    <h5>Просмотр</h5>
+    <div class="card p-3">
+      {% if user.profile.photo %}
+        <img src="{{ user.profile.photo.url }}" width="120">
+      {% else %}
+        <img src="{% static 'images/avatar-placeholder.png' %}" width="120">
+      {% endif %}
+      <h5 class="mt-2">{{ user.get_full_name|default:user.username }}</h5>
+      <p class="small text-muted">{{ user.email }}</p>
+      <p>{{ user.profile.bio }}</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

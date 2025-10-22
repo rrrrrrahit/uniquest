@@ -1,0 +1,41 @@
+{% extends 'main/base.html' %}
+{% block title %}Мое расписание{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-12">
+    <h2>Мое расписание</h2>
+    
+    {% if schedule %}
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>День недели</th>
+              <th>Время</th>
+              <th>Курс</th>
+              <th>Место</th>
+              <th>Примечание</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in schedule %}
+              <tr>
+                <td>{{ entry.weekday }}</td>
+                <td>{{ entry.start_time }} - {{ entry.end_time }}</td>
+                <td>{{ entry.course.title }}</td>
+                <td>{{ entry.location }}</td>
+                <td>{{ entry.note }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-info">
+        <p>Расписание пока не заполнено.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

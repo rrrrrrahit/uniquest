@@ -1,0 +1,27 @@
+{% extends 'main/base.html' %}
+{% block title %}Оценки{% endblock %}
+{% block content %}
+<h3>Оценки</h3>
+<table class="table table-striped mt-3">
+  <thead>
+    <tr>
+      <th>Курс</th>
+      <th>Оценка</th>
+      <th>Дата</th>
+      <th>Примечание</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for g in grades %}
+      <tr>
+        <td><a href="{% url 'course_detail' g.course.pk %}">{{ g.course.title }}</a></td>
+        <td>{{ g.grade }}</td>
+        <td>{{ g.date }}</td>
+        <td>{{ g.note }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="text-muted">Оценок пока нет.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

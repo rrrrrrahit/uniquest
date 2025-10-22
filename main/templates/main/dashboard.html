@@ -1,0 +1,63 @@
+{% extends 'main/base.html' %}
+{% load static %}
+{% block title %}Личный кабинет{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-4">
+    <div class="card profile-card p-3">
+      <div class="d-flex align-items-center">
+        {% if user.profile.photo %}
+          <img src="{{ user.profile.photo.url }}" class="rounded-circle me-3" width="72" height="72">
+        {% else %}
+          <img src="{% static 'images/avatar-placeholder.png' %}" class="rounded-circle me-3" width="72" height="72">
+        {% endif %}
+        <div>
+          <h5>{{ user.get_full_name|default:user.username }}</h5>
+          <p class="mb-0 text-muted">{{ user.profile.group }}</p>
+        </div>
+      </div>
+      <hr>
+      <div class="d-grid gap-2">
+        <a href="{% url 'schedule' %}" class="btn btn-outline-primary">Расписание</a>
+        <a href="{% url 'grades' %}" class="btn btn-outline-success">Оценки</a>
+        <a href="{% url 'profile' %}" class="btn btn-outline-secondary">Личный кабинет</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <h4>Быстрый доступ</h4>
+    <div class="row g-3">
+      {% for course in courses|slice:":6" %}
+        <div class="col-md-6">
+          <div class="card h-100 course-compact">
+            <div class="card-body">
+              <h6 class="card-title">{{ course.title }}</h6>
+              <p class="card-text small text-muted">{{ course.teacher }}</p>
+              <a href="{% url 'course_detail' course.pk %}" class="stretched-link"></a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <hr class="my-4">
+
+    <h5>Ближайшие занятия</h5>
+    <div class="list-group">
+      {% for item in upcoming %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between">
+            <div>
+              <strong>{{ item.course.title }}</strong> — {{ item.weekday }}, {{ item.start_time }}–{{ item.end_time }}
+              <div class="text-muted small">{{ item.location }}</div>
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-muted">Нет запланированных занятий.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

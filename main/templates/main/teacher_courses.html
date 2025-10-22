@@ -1,0 +1,34 @@
+{% extends 'main/base.html' %}
+{% block title %}Мои курсы{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-12">
+    <h2>Мои курсы</h2>
+    
+    {% if courses %}
+      <div class="row g-4">
+        {% for course in courses %}
+          <div class="col-md-4">
+            <div class="card">
+              {% if course.image %}
+                <img src="{{ course.image.url }}" class="card-img-top" alt="{{ course.title }}">
+              {% endif %}
+              <div class="card-body">
+                <h5 class="card-title">{{ course.title }}</h5>
+                <p class="card-text">{{ course.description|truncatechars:100 }}</p>
+                <p class="card-text"><small class="text-muted">Код: {{ course.code }}</small></p>
+                <a href="{% url 'course_detail' course.pk %}" class="btn btn-primary btn-sm">Подробнее</a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert alert-info">
+        <p>У вас пока нет курсов. Обратитесь к администратору для добавления курсов.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

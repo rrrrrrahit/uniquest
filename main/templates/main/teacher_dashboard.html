@@ -1,0 +1,53 @@
+{% extends 'main/base.html' %}
+{% block title %}Панель преподавателя{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-12">
+    <h2>Панель преподавателя</h2>
+    <p>Добро пожаловать, {{ user.get_full_name|default:user.username }}!</p>
+    
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Мои курсы</h5>
+            <p class="card-text">Управление курсами и студентами</p>
+            <a href="{% url 'teacher_courses' %}" class="btn btn-primary">Перейти</a>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Оценки студентов</h5>
+            <p class="card-text">Просмотр и управление оценками</p>
+            <a href="{% url 'teacher_grades' %}" class="btn btn-success">Перейти</a>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Расписание</h5>
+            <p class="card-text">Мое расписание занятий</p>
+            <a href="{% url 'teacher_schedule' %}" class="btn btn-info">Перейти</a>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Профиль</h5>
+            <p class="card-text">Редактирование профиля</p>
+            <a href="{% url 'profile' %}" class="btn btn-secondary">Перейти</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

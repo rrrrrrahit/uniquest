@@ -1,0 +1,32 @@
+{% extends 'main/base.html' %}
+{% block title %}{{ course.title }}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="card p-3">
+      <h3>{{ course.title }}</h3>
+      <p class="text-muted">Преподаватель: {{ course.teacher }}</p>
+      <p>{{ course.description }}</p>
+    </div>
+
+    <h5 class="mt-4">Оценки по курсу</h5>
+    <ul class="list-group">
+      {% for grade in grades %}
+        <li class="list-group-item">{{ grade.date }} — {{ grade.grade }} <span class="text-muted">({{ grade.note }})</span></li>
+      {% empty %}
+        <li class="list-group-item text-muted">Оценок нет</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="col-md-4">
+    <h5>Расписание по курсу</h5>
+    <ul class="list-group">
+      {% for s in schedule %}
+        <li class="list-group-item">{{ s.weekday }}: {{ s.start_time }}—{{ s.end_time }} <div class="small text-muted">{{ s.location }}</div></li>
+      {% empty %}
+        <li class="list-group-item text-muted">Нет занятий</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

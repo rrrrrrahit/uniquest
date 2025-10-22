@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: uniquest
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn uniquest.wsgi:application"
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: uniquest.settings
+      - key: PYTHON_VERSION
+        value: 3.13

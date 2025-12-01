@@ -1,21 +1,50 @@
-from pathlib import Path
 import os
-from django.contrib.messages import constants as messages
+from pathlib import Path
+from django.core.management.utils import get_random_secret_key
 
-# --- BASE DIRECTORY ---
+# Попытка загрузить .env файл (если есть)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv не установлен, продолжаем без него
+
+# --- ПУТИ ---
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- SECURITY ---
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+# --- БЕЗОПАСНОСТЬ ---
+SECRET_KEY = os.environ.get('SECRET_KEY', get_random_secret_key())
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = [
-    '.onrender.com',
-    '127.0.0.1',
-    'localhost'
-]
+# Разрешенные хосты для публичного доступа
+# Автоматическое определение хостов для облачных платформ
+ALLOWED_HOSTS_ENV = os.environ.get('ALLOWED_HOSTS', '')
+if ALLOWED_HOSTS_ENV:
+    ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(',')]
+else:
+    ALLOWED_HOSTS = ['*']  # Для публичного доступа разрешаем все хосты
 
-# --- APPLICATIONS ---
+# Автоматическое добавление хостов облачных платформ
+if 'RAILWAY_STATIC_URL' in os.environ:
+    ALLOWED_HOSTS.append(os.environ.get('RAILWAY_PUBLIC_DOMAIN', ''))
+if 'RENDER' in os.environ or 'RENDER_EXTERNAL_HOSTNAME' in os.environ:
+    render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
+    if render_host:
+        ALLOWED_HOSTS.append(render_host)
+    ALLOWED_HOSTS.append('*.onrender.com')  # Все Render поддомены
+if 'FLY_APP_NAME' in os.environ:
+    ALLOWED_HOSTS.append(f"{os.environ.get('FLY_APP_NAME')}.fly.dev")
+
+# Безопасность для production
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+
+# --- УСТАНОВЛЕННЫЕ ПРИЛОЖЕНИЯ ---
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -23,13 +52,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'main',
+    # сюда добавляем наше приложение
+    'main',  # если ты назвала приложение main
 ]
 
-# --- MIDDLEWARE ---
+
+# --- МИДЛВАР ---
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # обязательно для Render
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Для статики в production
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -38,11 +69,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# --- URLS / WSGI ---
 ROOT_URLCONF = 'uniquest.urls'
-WSGI_APPLICATION = 'uniquest.wsgi.application'
 
-# --- TEMPLATES ---
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -59,71 +87,84 @@ TEMPLATES = [
     },
 ]
 
-# --- DATABASE ---
-MYSQL_NAME = os.getenv('MYSQL_DATABASE')
-MYSQL_USER = os.getenv('MYSQL_USER')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
-MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
-MYSQL_PORT = os.getenv('MYSQL_PORT', '3306')
+WSGI_APPLICATION = 'uniquest.wsgi.application'
 
-if MYSQL_NAME and MYSQL_USER and MYSQL_PASSWORD:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.mysql',
-            'NAME': MYSQL_NAME,
-            'USER': MYSQL_USER,
-            'PASSWORD': MYSQL_PASSWORD,
-            'HOST': MYSQL_HOST,
-            'PORT': MYSQL_PORT,
-            'OPTIONS': {'charset': 'utf8mb4'},
-        }
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+# --- БАЗА ДАННЫХ (PostgreSQL) ---
+# Поддержка Render и других облачных платформ
+try:
+    import dj_database_url
+    DATABASE_URL_AVAILABLE = True
+except ImportError:
+    DATABASE_URL_AVAILABLE = False
 
-# --- PASSWORD VALIDATORS ---
+# Базовая конфигурация базы данных
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DB_NAME', 'uniquestus'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'Ssssuro4ka.'),
+        'HOST': os.environ.get('DB_HOST', os.environ.get('PGHOST', 'localhost')),
+        'PORT': os.environ.get('DB_PORT', os.environ.get('PGPORT', '5432')),
+        'OPTIONS': {
+            'connect_timeout': 10,
+            'options': '-c timezone=Asia/Almaty'
+        },
+        'CONN_MAX_AGE': 600,  # Поддержание соединения
+    }
+}
+
+# Автоматическое использование DATABASE_URL (Render, Heroku и др.)
+if DATABASE_URL_AVAILABLE and 'DATABASE_URL' in os.environ:
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=600,
+        conn_health_checks=True,
+        default=os.environ.get('DATABASE_URL')
+    )
+
+# Резервная SQLite база (если PostgreSQL недоступна)
+# Раскомментируйте, если нужна резервная база
+# DATABASES['default'] = {
+#     'ENGINE': 'django.db.backends.sqlite3',
+#     'NAME': BASE_DIR / 'db.sqlite3',
+# }
+
+
+
+
+# --- ПАРОЛИ ---
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
 ]
 
-# --- LANGUAGE / TIMEZONE ---
+# --- ЛОКАЛЬНЫЕ НАСТРОЙКИ ---
 LANGUAGE_CODE = 'ru-ru'
-TIME_ZONE = 'Europe/Moscow'
+TIME_ZONE = 'Asia/Almaty'
 USE_I18N = True
+USE_L10N = True
 USE_TZ = True
 
-# --- STATIC & MEDIA FILES ---
-STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / 'main' / 'static']
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # обязательно для Render
+# --- СТАТИКА ---
+STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # Для production
 
+# WhiteNoise для статики
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Медиа файлы (загрузки пользователей)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# WhiteNoise: для правильной раздачи статики
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
-# --- DEFAULT PK ---
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# --- MESSAGES ---
-MESSAGE_TAGS = {
-    messages.DEBUG: 'secondary',
-    messages.INFO: 'info',
-    messages.SUCCESS: 'success',
-    messages.WARNING: 'warning',
-    messages.ERROR: 'danger',
-}
-
-# --- LOGIN / LOGOUT ---
-LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'dashboard'
-LOGOUT_REDIRECT_URL = 'index'

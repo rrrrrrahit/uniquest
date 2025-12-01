@@ -3,18 +3,15 @@ from django.contrib.auth.models import User
 from django.dispatch import receiver
 from .models import Profile
 
-
 @receiver(post_save, sender=User)
 def create_profile(sender, instance, created, **kwargs):
     if created:
+        # Создаём профиль для нового пользователя, если его ещё нет
         Profile.objects.get_or_create(user=instance)
-
 
 @receiver(post_save, sender=User)
 def save_profile(sender, instance, **kwargs):
-    # Ensure related profile is saved when user is saved
     try:
         instance.profile.save()
     except Profile.DoesNotExist:
         Profile.objects.create(user=instance)
-

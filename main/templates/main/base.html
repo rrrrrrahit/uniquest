@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   
   <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 
   <!-- Custom Styles -->
   <link rel="stylesheet" href="{% static 'main/css/style.css' %}">
@@ -121,7 +121,7 @@
     <div class="container text-center">
       <div class="row align-items-center">
         <div class="col-md-6 text-md-start">
-          <small>© {{ now.year }} UniQuest — образовательная платформа. Все права защищены.</small>
+          <small>© {% now "Y" %} UniQuest — образовательная платформа Казахстана. Все права защищены.</small>
         </div>
         <div class="col-md-6 text-md-end">
           <div class="social-links">

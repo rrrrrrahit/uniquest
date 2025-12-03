@@ -10,30 +10,29 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Проверяем, существует ли поле group_id, и добавляем только если его нет
-        migrations.RunSQL(
-            sql="""
-                DO $$ 
-                BEGIN
-                    -- Добавляем поле group_id только если его еще нет
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name='main_scheduleentry' AND column_name='group_id'
-                    ) THEN
-                        ALTER TABLE main_scheduleentry 
-                        ADD COLUMN group_id INTEGER NULL 
-                        REFERENCES main_group(id) ON DELETE SET NULL;
-                    END IF;
-                END $$;
-            """,
-            reverse_sql="-- Reverse migration not needed",
-        ),
-        # Добавляем поле в состояние Django (для совместимости)
-        # Используем SeparateDatabaseAndState чтобы не выполнять SQL операцию
+        # Используем SeparateDatabaseAndState чтобы разделить операции с БД и состояние Django
         migrations.SeparateDatabaseAndState(
+            # Операции с базой данных - проверяем и добавляем поле только если его нет
             database_operations=[
-                # В базе данных уже все сделано через RunSQL выше
+                migrations.RunSQL(
+                    sql="""
+                        DO $$ 
+                        BEGIN
+                            -- Добавляем поле group_id только если его еще нет
+                            IF NOT EXISTS (
+                                SELECT 1 FROM information_schema.columns 
+                                WHERE table_name='main_scheduleentry' AND column_name='group_id'
+                            ) THEN
+                                ALTER TABLE main_scheduleentry 
+                                ADD COLUMN group_id INTEGER NULL 
+                                REFERENCES main_group(id) ON DELETE SET NULL;
+                            END IF;
+                        END $$;
+                    """,
+                    reverse_sql="-- Reverse migration not needed",
+                ),
             ],
+            # Обновляем состояние Django (без выполнения SQL)
             state_operations=[
                 migrations.AddField(
                     model_name="scheduleentry",

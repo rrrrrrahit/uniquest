@@ -121,14 +121,34 @@ def semantic_search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         ]
         return [_lecture_to_result(lec, 1.0) for lec in qs]
 
-    lectures = Lecture.objects.all()
-    corpus = [lec.content_text.split() for lec in lectures]
-    bm25 = BM25Okapi(corpus)
-    scores = bm25.get_scores(query.split())
-
-    scored = list(zip(scores, lectures))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [_lecture_to_result(lec, float(score)) for score, lec in scored[:top_k]]
+    lectures = Lecture.objects.exclude(content_text__isnull=True).exclude(content_text='')
+    if not lectures.exists():
+        # Если нет лекций с текстом, возвращаем пустой список
+        return []
+    
+    corpus = []
+    valid_lectures = []
+    for lec in lectures:
+        if lec.content_text:
+            try:
+                corpus.append(lec.content_text.split())
+                valid_lectures.append(lec)
+            except Exception:
+                continue
+    
+    if not corpus:
+        return []
+    
+    try:
+        bm25 = BM25Okapi(corpus)
+        scores = bm25.get_scores(query.split())
+        scored = list(zip(scores, valid_lectures))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [_lecture_to_result(lec, float(score)) for score, lec in scored[:top_k]]
+    except Exception:
+        # Fallback: простой поиск по вхождению
+        qs = Lecture.objects.filter(content_text__icontains=query)[:top_k]
+        return [_lecture_to_result(lec, 1.0) for lec in qs]
 
 
 def _lecture_to_result(lecture: Lecture, score: float) -> Dict[str, Any]:

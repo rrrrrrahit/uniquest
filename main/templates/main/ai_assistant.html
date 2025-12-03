@@ -77,7 +77,7 @@
                     {% endif %}
                   </div>
                   
-                  {% if result.lecture %}
+                  {% if result.lecture and result.lecture.course %}
                     <p class="text-muted small mb-2">
                       <i class="fas fa-graduation-cap me-1"></i>
                       Курс: <a href="{% url 'course_detail' result.lecture.course.id %}">{{ result.lecture.course.name }}</a>
@@ -87,13 +87,17 @@
                   <p class="card-text">{{ result.snippet }}</p>
                   
                   <div class="mt-3">
-                    {% if result.lecture %}
+                    {% if result.lecture and result.lecture.id %}
                       <a href="{% url 'lecture_detail' result.lecture.id %}" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-eye me-1"></i>Читать полностью
                       </a>
                     {% elif result.url %}
                       <a href="{{ result.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-external-link-alt me-1"></i>Открыть ссылку
+                      </a>
+                    {% elif result.id %}
+                      <a href="{% url 'lecture_detail' result.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-eye me-1"></i>Читать полностью
                       </a>
                     {% endif %}
                   </div>

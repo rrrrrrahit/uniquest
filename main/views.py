@@ -426,91 +426,128 @@ def grades_view(request):
 @student_required
 def ai_assistant(request):
     """ИИ-помощник для студентов с поиском по специальности"""
-    user = request.user
-    profile = getattr(user, 'profile', None)
-    specialty = profile.specialty if profile else None
-    
-    # Получаем курсы студента
-    student_obj = None
-    student_courses = []
-    if profile:
-        try:
-            student_obj = Student.objects.get(user=user)
-            enrollments = Enrollment.objects.filter(student=student_obj).select_related('course')
-            student_courses = [e.course for e in enrollments]
-        except Student.DoesNotExist:
-            pass
-    
-    # Поиск
-    query = request.GET.get('q', '').strip()
-    search_results = []
-    suggested_questions = []
-    
-    if query:
-        # Семантический поиск по всем лекциям
-        all_results = semantic_search(query, top_k=10)
+    try:
+        user = request.user
+        profile = getattr(user, 'profile', None)
+        specialty = profile.specialty if profile and hasattr(profile, 'specialty') and profile.specialty else None
         
-        # Загружаем объекты лекций для результатов
-        from .models import Lecture
-        for result in all_results:
-            lecture_id = result.get('id')
-            if lecture_id:
-                try:
-                    lecture = Lecture.objects.select_related('course').get(id=lecture_id)
-                    result['lecture'] = lecture
-                except Lecture.DoesNotExist:
-                    pass
+        # Получаем курсы студента
+        student_obj = None
+        student_courses = []
+        if profile:
+            try:
+                student_obj = Student.objects.get(user=user)
+                enrollments = Enrollment.objects.filter(student=student_obj).select_related('course')
+                student_courses = [e.course for e in enrollments if e.course]
+            except Student.DoesNotExist:
+                pass
+            except Exception:
+                pass
         
-        # Фильтруем по курсам студента, если есть
-        if student_courses:
-            course_ids = [c.id for c in student_courses]
-            filtered_results = []
-            other_results = []
-            
-            for result in all_results:
-                lecture = result.get('lecture')
-                if lecture and lecture.course_id in course_ids:
-                    filtered_results.append(result)
+        # Поиск
+        query = request.GET.get('q', '').strip()
+        search_results = []
+        suggested_questions = []
+        
+        if query:
+            try:
+                # Семантический поиск по всем лекциям
+                all_results = semantic_search(query, top_k=10)
+                
+                # Загружаем объекты лекций для результатов
+                from .models import Lecture
+                for result in all_results:
+                    lecture_id = result.get('id')
+                    if lecture_id:
+                        try:
+                            lecture = Lecture.objects.select_related('course').get(id=lecture_id)
+                            result['lecture'] = lecture
+                        except Lecture.DoesNotExist:
+                            pass
+                        except Exception:
+                            pass
+                
+                # Фильтруем по курсам студента, если есть
+                if student_courses:
+                    course_ids = [c.id for c in student_courses if c and hasattr(c, 'id')]
+                    filtered_results = []
+                    other_results = []
+                    
+                    for result in all_results:
+                        lecture = result.get('lecture')
+                        if lecture and hasattr(lecture, 'course') and lecture.course:
+                            try:
+                                if lecture.course.id in course_ids:
+                                    filtered_results.append(result)
+                                else:
+                                    other_results.append(result)
+                            except (AttributeError, TypeError):
+                                other_results.append(result)
+                        else:
+                            other_results.append(result)
+                    
+                    # Сначала показываем результаты из курсов студента
+                    search_results = filtered_results + other_results[:5]
                 else:
-                    other_results.append(result)
-            
-            # Сначала показываем результаты из курсов студента
-            search_results = filtered_results + other_results[:5]
+                    search_results = all_results[:10]
+            except Exception as e:
+                # Если поиск не работает, показываем пустые результаты
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f'AI Assistant search error: {str(e)}', exc_info=True)
+                search_results = []
+                messages.warning(request, 'Поиск временно недоступен. Попробуйте позже.')
         else:
-            search_results = all_results[:10]
-    else:
-        # Предлагаем вопросы по специальности
-        if specialty:
-            suggested_questions = [
-                f"Что изучают на специальности {specialty.name_ru}?",
-                f"Какие предметы входят в программу {specialty.name_ru}?",
-                f"Основные темы специальности {specialty.name_ru}",
+            # Предлагаем вопросы по специальности
+            if specialty and hasattr(specialty, 'name_ru'):
+                suggested_questions = [
+                    f"Что изучают на специальности {specialty.name_ru}?",
+                    f"Какие предметы входят в программу {specialty.name_ru}?",
+                    f"Основные темы специальности {specialty.name_ru}",
+                ]
+            else:
+                suggested_questions = [
+                    "Что такое программирование?",
+                    "Основы баз данных",
+                    "Веб-разработка для начинающих",
+                    "Алгоритмы и структуры данных",
+                ]
+        
+        # Популярные вопросы по специальности
+        popular_questions = []
+        if specialty and hasattr(specialty, 'name_ru'):
+            popular_questions = [
+                {"text": f"Какие навыки нужны для {specialty.name_ru}?", "icon": "fa-lightbulb"},
+                {"text": f"Карьерные возможности в {specialty.name_ru}", "icon": "fa-briefcase"},
+                {"text": f"Сложные темы в {specialty.name_ru}", "icon": "fa-graduation-cap"},
             ]
-        else:
-            suggested_questions = [
+        
+        return render(request, 'main/ai_assistant.html', {
+            'query': query,
+            'search_results': search_results,
+            'suggested_questions': suggested_questions,
+            'popular_questions': popular_questions,
+            'specialty': specialty,
+            'student_courses': student_courses,
+        })
+    except Exception as e:
+        # Общая обработка ошибок
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f'AI Assistant error: {str(e)}', exc_info=True)
+        messages.error(request, f'Произошла ошибка: {str(e)}')
+        return render(request, 'main/ai_assistant.html', {
+            'query': request.GET.get('q', '').strip(),
+            'search_results': [],
+            'suggested_questions': [
                 "Что такое программирование?",
                 "Основы баз данных",
                 "Веб-разработка для начинающих",
-                "Алгоритмы и структуры данных",
-            ]
-    
-    # Популярные вопросы по специальности
-    popular_questions = []
-    if specialty:
-        popular_questions = [
-            {"text": f"Какие навыки нужны для {specialty.name_ru}?", "icon": "fa-lightbulb"},
-            {"text": f"Карьерные возможности в {specialty.name_ru}", "icon": "fa-briefcase"},
-            {"text": f"Сложные темы в {specialty.name_ru}", "icon": "fa-graduation-cap"},
-        ]
-    
-    return render(request, 'main/ai_assistant.html', {
-        'query': query,
-        'search_results': search_results,
-        'suggested_questions': suggested_questions,
-        'popular_questions': popular_questions,
-        'specialty': specialty,
-        'student_courses': student_courses,
-    })
+            ],
+            'popular_questions': [],
+            'specialty': None,
+            'student_courses': [],
+        })
 
 
 # ===== Публичные академические страницы =====

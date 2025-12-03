@@ -28,18 +28,6 @@ class Migration(migrations.Migration):
             new_name='main_studen_email_dad883_idx',
             old_name='main_studen_email_idx',
         ),
-        migrations.AddField(
-            model_name='scheduleentry',
-            name='group',
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name='schedule_entries',
-                to='main.group',
-                verbose_name='Учебная группа'
-            ),
-        ),
         # Сначала удаляем старое поле vector_embedding (если оно было типа double precision[])
         migrations.RunSQL(
             # Удаляем старое поле, если оно существует

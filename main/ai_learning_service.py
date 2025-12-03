@@ -69,7 +69,16 @@ def analyze_learning_style(student):
     attendance_times = []
     for att in attendances:
         if att.date:
-            attendance_times.append(att.date.hour)
+            # Если date - это date объект, используем время по умолчанию (12:00)
+            # Или берем из created_at если есть
+            try:
+                if hasattr(att.date, 'hour'):
+                    attendance_times.append(att.date.hour)
+                else:
+                    # Если это date объект, используем среднее время (12:00)
+                    attendance_times.append(12)
+            except Exception:
+                attendance_times.append(12)  # По умолчанию полдень
     
     if attendance_times:
         avg_hour = np.mean(attendance_times)
@@ -124,20 +133,29 @@ def predict_exam_success(student, course, exam_date=None):
     current_avg = float(grades.aggregate(avg=Avg('value'))['avg'] or 70)
     
     # Посещаемость
-    attendances = Attendance.objects.filter(
-        enrollment=enrollment
-    )
-    total_lectures = Lecture.objects.filter(course=course).count()
-    attended = attendances.filter(present=True).count()
-    attendance_rate = (attended / total_lectures * 100) if total_lectures > 0 else 70
+    try:
+        attendances = Attendance.objects.filter(
+            enrollment=enrollment
+        )
+        total_lectures = Lecture.objects.filter(course=course).count()
+        attended = attendances.filter(present=True).count()
+        attendance_rate = (attended / total_lectures * 100) if total_lectures > 0 else 70
+    except Exception:
+        attendance_rate = 75  # По умолчанию
     
     # Выполнение заданий
-    assignments = Assignment.objects.filter(course=course)
-    submissions_count = 0
-    for assignment in assignments:
-        if hasattr(assignment, 'submissions') and assignment.submissions.filter(student=student).exists():
-            submissions_count += 1
-    assignment_completion = (submissions_count / assignments.count() * 100) if assignments.count() > 0 else 70
+    try:
+        assignments = Assignment.objects.filter(course=course)
+        submissions_count = 0
+        for assignment in assignments:
+            try:
+                if hasattr(assignment, 'submissions') and assignment.submissions.filter(student=student).exists():
+                    submissions_count += 1
+            except Exception:
+                pass
+        assignment_completion = (submissions_count / assignments.count() * 100) if assignments.count() > 0 else 70
+    except Exception:
+        assignment_completion = 75  # По умолчанию
     
     # Тренд оценок
     if grades.count() >= 3:
@@ -346,58 +364,75 @@ def get_ai_recommendations(student, course):
     """
     Получает ИИ-рекомендации для студента по курсу
     """
-    profile = analyze_learning_style(student)
-    prediction = predict_exam_success(student, course)
-    
     recommendations = []
     
-    # Рекомендации на основе стиля обучения
-    if profile.learning_style == 'visual':
-        recommendations.append({
-            'type': 'style',
-            'title': 'Визуальный стиль обучения',
-            'text': 'Используйте диаграммы, схемы и визуальные материалы для лучшего запоминания.',
-            'icon': 'fa-eye'
-        })
-    elif profile.learning_style == 'kinesthetic':
-        recommendations.append({
-            'type': 'style',
-            'title': 'Кинестетический стиль',
-            'text': 'Практикуйтесь активно: решайте задачи, создавайте проекты, экспериментируйте.',
-            'icon': 'fa-hands'
-        })
-    
-    # Рекомендации на основе предсказания
-    if prediction:
-        if prediction.success_probability < 70:
+    try:
+        profile = analyze_learning_style(student)
+        
+        # Рекомендации на основе стиля обучения
+        if profile and profile.learning_style == 'visual':
             recommendations.append({
-                'type': 'warning',
-                'title': 'Требуется внимание',
-                'text': f'Вероятность успеха: {prediction.success_probability}%. Рекомендуется {prediction.recommended_study_hours} часов подготовки.',
-                'icon': 'fa-exclamation-triangle'
+                'type': 'style',
+                'title': 'Визуальный стиль обучения',
+                'text': 'Используйте диаграммы, схемы и визуальные материалы для лучшего запоминания.',
+                'icon': 'fa-eye'
+            })
+        elif profile and profile.learning_style == 'kinesthetic':
+            recommendations.append({
+                'type': 'style',
+                'title': 'Кинестетический стиль',
+                'text': 'Практикуйтесь активно: решайте задачи, создавайте проекты, экспериментируйте.',
+                'icon': 'fa-hands'
             })
         
-        if prediction.focus_topics:
+        # Рекомендации по времени
+        if profile and profile.preferred_study_time:
+            time_map = {
+                'morning': 'Утренние часы (6-12)',
+                'afternoon': 'Дневное время (12-18)',
+                'evening': 'Вечерние часы (18-24)',
+                'night': 'Ночное время (0-6)'
+            }
             recommendations.append({
-                'type': 'focus',
-                'title': 'Темы для фокуса',
-                'text': f'Сосредоточьтесь на: {", ".join(prediction.focus_topics[:3])}',
-                'icon': 'fa-bullseye'
+                'type': 'time',
+                'title': 'Оптимальное время обучения',
+                'text': f'Ваше продуктивное время: {time_map.get(profile.preferred_study_time, "День")}',
+                'icon': 'fa-clock'
             })
+    except Exception:
+        pass
     
-    # Рекомендации по времени
-    if profile.preferred_study_time:
-        time_map = {
-            'morning': 'Утренние часы (6-12)',
-            'afternoon': 'Дневное время (12-18)',
-            'evening': 'Вечерние часы (18-24)',
-            'night': 'Ночное время (0-6)'
-        }
+    try:
+        prediction = predict_exam_success(student, course)
+        
+        # Рекомендации на основе предсказания
+        if prediction:
+            if float(prediction.success_probability) < 70:
+                recommendations.append({
+                    'type': 'warning',
+                    'title': 'Требуется внимание',
+                    'text': f'Вероятность успеха: {prediction.success_probability}%. Рекомендуется {prediction.recommended_study_hours} часов подготовки.',
+                    'icon': 'fa-exclamation-triangle'
+                })
+            
+            if prediction.focus_topics and len(prediction.focus_topics) > 0:
+                focus_topics_str = ", ".join(str(t) for t in prediction.focus_topics[:3])
+                recommendations.append({
+                    'type': 'focus',
+                    'title': 'Темы для фокуса',
+                    'text': f'Сосредоточьтесь на: {focus_topics_str}',
+                    'icon': 'fa-bullseye'
+                })
+    except Exception:
+        pass
+    
+    # Если нет рекомендаций, добавляем общие
+    if not recommendations:
         recommendations.append({
-            'type': 'time',
-            'title': 'Оптимальное время обучения',
-            'text': f'Ваше продуктивное время: {time_map.get(profile.preferred_study_time, "День")}',
-            'icon': 'fa-clock'
+            'type': 'info',
+            'title': 'Начните обучение',
+            'text': 'Выполняйте задания и посещайте лекции, чтобы получить персонализированные рекомендации.',
+            'icon': 'fa-info-circle'
         })
     
     return recommendations

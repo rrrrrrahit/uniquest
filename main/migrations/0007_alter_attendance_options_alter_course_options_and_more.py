@@ -5,6 +5,23 @@ import django.db.models.deletion
 import django.utils.timezone
 from django.conf import settings
 from django.db import migrations, models
+from django.db.migrations.operations import SeparateDatabaseAndState
+from django.db.migrations import RunPython
+
+
+def remove_group_field_from_state(apps, schema_editor):
+    """Безопасно удаляем поле group из состояния Django, если оно существует"""
+    ScheduleEntry = apps.get_model('main', 'ScheduleEntry')
+    # Проверяем, существует ли поле в локальных полях модели
+    field_names = [f.name for f in ScheduleEntry._meta.local_fields]
+    if 'group' in field_names:
+        # Удаляем поле из состояния
+        ScheduleEntry._meta.remove_field('group')
+
+
+def reverse_remove_group_field_from_state(apps, schema_editor):
+    """Обратная операция - не требуется, так как поле не должно существовать"""
+    pass
 
 
 class Migration(migrations.Migration):
@@ -55,9 +72,31 @@ class Migration(migrations.Migration):
             model_name='scheduleentry',
             name='created_at',
         ),
-        migrations.RemoveField(
-            model_name='scheduleentry',
-            name='group',
+        # Безопасное удаление поля group - проверяем существование перед удалением
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunSQL(
+                    sql="""
+                        DO $$ 
+                        BEGIN
+                            -- Удаляем колонку group_id только если она существует
+                            IF EXISTS (
+                                SELECT 1 FROM information_schema.columns 
+                                WHERE table_name='main_scheduleentry' AND column_name='group_id'
+                            ) THEN
+                                ALTER TABLE main_scheduleentry DROP COLUMN group_id;
+                            END IF;
+                        END $$;
+                    """,
+                    reverse_sql="-- Reverse migration not needed",
+                ),
+            ],
+            state_operations=[
+                RunPython(
+                    code=remove_group_field_from_state,
+                    reverse_code=reverse_remove_group_field_from_state,
+                ),
+            ],
         ),
         migrations.RemoveField(
             model_name='student',

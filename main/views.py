@@ -47,30 +47,46 @@ def register_view(request):
     if request.method == 'POST':
         form = UserRegisterForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            profile = Profile.objects.create(
-                user=user,
-                role=form.cleaned_data['role'],
-                group=form.cleaned_data.get('group'),
-                specialty=form.cleaned_data.get('specialty'),
-                enrollment_date=timezone.now().date()
-                if form.cleaned_data['role'] == Profile.ROLE_STUDENT
-                else None,
-            )
-            # Создаём сущность Student для студентов, чтобы связать с академическими моделями
-            if form.cleaned_data['role'] == Profile.ROLE_STUDENT:
-                Student.objects.get_or_create(
+            try:
+                user = form.save()
+                profile = Profile.objects.create(
                     user=user,
-                    defaults={
-                        "first_name": user.first_name or user.username,
-                        "last_name": user.last_name or "",
-                        "email": user.email or f"{user.username}@example.com",
-                        "group": form.cleaned_data.get('group'),
-                    },
+                    role=form.cleaned_data['role'],
+                    group=form.cleaned_data.get('group'),
+                    specialty=form.cleaned_data.get('specialty'),
+                    enrollment_date=timezone.now().date()
+                    if form.cleaned_data['role'] == Profile.ROLE_STUDENT
+                    else None,
                 )
-            login(request, user)
-            messages.success(request, 'Регистрация успешна. Добро пожаловать!')
-            return redirect('dashboard')
+                # Создаём сущность Student для студентов, чтобы связать с академическими моделями
+                if form.cleaned_data['role'] == Profile.ROLE_STUDENT:
+                    # Генерируем уникальный email если он уже существует
+                    student_email = user.email or f"{user.username}@example.com"
+                    email_base = student_email.split('@')[0]
+                    email_domain = student_email.split('@')[1] if '@' in student_email else 'example.com'
+                    counter = 1
+                    while Student.objects.filter(email=student_email).exists():
+                        student_email = f"{email_base}{counter}@{email_domain}"
+                        counter += 1
+                    
+                    Student.objects.get_or_create(
+                        user=user,
+                        defaults={
+                            "first_name": user.first_name or user.username,
+                            "last_name": user.last_name or "",
+                            "email": student_email,
+                            "group": form.cleaned_data.get('group'),
+                        },
+                    )
+                login(request, user)
+                messages.success(request, 'Регистрация успешна. Добро пожаловать!')
+                return redirect('dashboard')
+            except Exception as e:
+                messages.error(request, f'Ошибка при регистрации: {str(e)}')
+                # Логируем ошибку для отладки
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f'Registration error: {str(e)}', exc_info=True)
     else:
         form = UserRegisterForm()
     return render(request, 'main/register.html', {'form': form})
@@ -121,9 +137,14 @@ def student_required(view_func):
 @login_required
 def dashboard(request):
     user = request.user
-    # Стандартные роли
+    
+    # Проверяем роль преподавателя ПЕРВЫМ делом
+    if hasattr(user, 'profile') and user.profile.role == Profile.ROLE_TEACHER:
+        return redirect('teacher_dashboard')
+    
+    # Стандартные роли - только для администраторов
     if user.is_staff:
-        # Возможные действия администратора/преподавателя
+        # Возможные действия администратора
         from django.core.management import call_command
 
         if request.method == "POST":
@@ -139,7 +160,7 @@ def dashboard(request):
                 messages.success(request, "Индексация лекций выполнена.")
             return redirect("dashboard")
 
-        # Админский/teacher дашборд с общей статистикой
+        # Админский дашборд с общей статистикой
         total_students = Student.objects.count()
         active_groups = Group.objects.count()
         total_courses = Course.objects.count()
@@ -158,11 +179,20 @@ def dashboard(request):
             },
         )
 
-    if hasattr(user, 'profile') and user.profile.role == Profile.ROLE_TEACHER:
-        return redirect('teacher_dashboard')
-
     # Для студентов (личный кабинет)
-    courses = Course.objects.all()
+    # Получаем курсы, на которые записан студент
+    student_profile = getattr(user, 'profile', None)
+    if student_profile and student_profile.role == Profile.ROLE_STUDENT:
+        # Получаем студента из модели Student
+        try:
+            student_obj = Student.objects.get(user=user)
+            enrollments = Enrollment.objects.filter(student=student_obj).select_related('course')
+            courses = [enrollment.course for enrollment in enrollments]
+        except Student.DoesNotExist:
+            courses = Course.objects.all()[:10]  # Fallback
+    else:
+        courses = Course.objects.all()[:10]
+    
     user_grades = Grade.objects.filter(student=user).select_related('course')
     avg_score = user_grades.aggregate(avg=Avg('value'))['avg'] or 0
 

@@ -751,6 +751,137 @@ def ai_assistant(request):
         })
 
 
+@login_required
+@student_required
+def ai_learning_assistant(request):
+    """Революционный ИИ-ассистент для персонализированного обучения"""
+    from .ai_learning_service import (
+        analyze_learning_style, get_ai_recommendations,
+        predict_exam_success, create_personalized_study_plan
+    )
+    from .models import ExamPrediction, PersonalizedStudyPlan
+    
+    user = request.user
+    profile = getattr(user, 'profile', None)
+    
+    # Получаем курсы студента
+    student_obj = None
+    student_courses = []
+    if profile:
+        try:
+            student_obj = Student.objects.get(user=user)
+            enrollments = Enrollment.objects.filter(student=student_obj).select_related('course')
+            student_courses = [e.course for e in enrollments if e.course]
+        except Student.DoesNotExist:
+            pass
+    
+    # Анализируем стиль обучения
+    learning_profile = None
+    try:
+        learning_profile = analyze_learning_style(user)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f'Error analyzing learning style: {str(e)}')
+    
+    # Получаем рекомендации для всех курсов
+    all_recommendations = {}
+    exam_predictions = {}
+    study_plans = {}
+    
+    for course in student_courses:
+        try:
+            recommendations = get_ai_recommendations(user, course)
+            all_recommendations[course.id] = recommendations
+            
+            # Получаем последнее предсказание
+            prediction = ExamPrediction.objects.filter(
+                student=user, course=course
+            ).order_by('-created_at').first()
+            if prediction:
+                exam_predictions[course.id] = prediction
+            
+            # Получаем активный план
+            plan = PersonalizedStudyPlan.objects.filter(
+                student=user, course=course, is_active=True
+            ).order_by('-created_at').first()
+            if plan:
+                study_plans[course.id] = plan
+        except Exception:
+            pass
+    
+    return render(request, 'main/ai_learning_assistant.html', {
+        'learning_profile': learning_profile,
+        'student_courses': student_courses,
+        'recommendations': all_recommendations,
+        'exam_predictions': exam_predictions,
+        'study_plans': study_plans,
+    })
+
+
+@login_required
+@student_required
+def predict_exam_view(request, course_id):
+    """Предсказание успеха на экзамене"""
+    from .ai_learning_service import predict_exam_success
+    from .models import Course
+    
+    course = get_object_or_404(Course, id=course_id)
+    
+    if request.method == 'POST':
+        exam_date_str = request.POST.get('exam_date')
+        exam_date = None
+        if exam_date_str:
+            try:
+                from datetime import datetime
+                exam_date = datetime.strptime(exam_date_str, '%Y-%m-%d')
+                exam_date = timezone.make_aware(exam_date)
+            except Exception:
+                pass
+        
+        try:
+            prediction = predict_exam_success(request.user, course, exam_date)
+            messages.success(request, 'Предсказание успешно создано!')
+            return redirect('ai_learning_assistant')
+        except Exception as e:
+            messages.error(request, f'Ошибка: {str(e)}')
+    
+    return redirect('ai_learning_assistant')
+
+
+@login_required
+@student_required
+def create_study_plan_view(request, course_id):
+    """Создание персонализированного плана обучения"""
+    from .ai_learning_service import create_personalized_study_plan
+    from .models import Course
+    
+    course = get_object_or_404(Course, id=course_id)
+    
+    if request.method == 'POST':
+        target_date_str = request.POST.get('target_date')
+        if not target_date_str:
+            messages.error(request, 'Укажите целевую дату')
+            return redirect('ai_learning_assistant')
+        
+        try:
+            from datetime import datetime
+            target_date = datetime.strptime(target_date_str, '%Y-%m-%d')
+            target_date = timezone.make_aware(target_date)
+            
+            if target_date <= timezone.now():
+                messages.error(request, 'Целевая дата должна быть в будущем')
+                return redirect('ai_learning_assistant')
+            
+            plan = create_personalized_study_plan(request.user, course, target_date)
+            messages.success(request, f'Персонализированный план создан! Всего часов: {plan.total_hours}')
+            return redirect('ai_learning_assistant')
+        except Exception as e:
+            messages.error(request, f'Ошибка: {str(e)}')
+    
+    return redirect('ai_learning_assistant')
+
+
 # ===== Публичные академические страницы =====
 
 def groups_list(request):

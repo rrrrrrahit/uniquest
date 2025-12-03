@@ -314,3 +314,153 @@ class Grade(models.Model):
     def __str__(self):
         student_name = self.student.username if self.student else (self.enrollment.student if self.enrollment else "Неизвестно")
         return f"{student_name} - {self.course.name} - {self.value}"
+
+# ----------------- SmartLearningProfile -----------------
+class SmartLearningProfile(models.Model):
+    """Умный профиль обучения студента с ИИ-анализом"""
+    student = models.OneToOneField(User, on_delete=models.CASCADE, related_name='learning_profile')
+    
+    # Стиль обучения (определяется ИИ на основе поведения)
+    learning_style = models.CharField(
+        max_length=20,
+        choices=[
+            ('visual', 'Визуальный'),
+            ('auditory', 'Аудиальный'),
+            ('kinesthetic', 'Кинестетический'),
+            ('reading', 'Чтение/Письмо'),
+            ('mixed', 'Смешанный')
+        ],
+        default='mixed',
+        verbose_name='Стиль обучения'
+    )
+    
+    # Предпочтения в обучении
+    preferred_study_time = models.CharField(
+        max_length=20,
+        choices=[
+            ('morning', 'Утро (6-12)'),
+            ('afternoon', 'День (12-18)'),
+            ('evening', 'Вечер (18-24)'),
+            ('night', 'Ночь (0-6)')
+        ],
+        default='afternoon',
+        verbose_name='Предпочтительное время обучения'
+    )
+    
+    # Анализ производительности
+    avg_focus_duration = models.IntegerField(default=45, verbose_name='Средняя длительность фокуса (мин)')
+    optimal_study_sessions = models.IntegerField(default=3, verbose_name='Оптимальное количество сессий в день')
+    
+    # ИИ метрики
+    learning_velocity = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=1.0,
+        verbose_name='Скорость обучения (множитель)'
+    )
+    retention_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.7,
+        verbose_name='Коэффициент запоминания'
+    )
+    
+    # Данные для анализа
+    study_patterns = models.JSONField(default=dict, verbose_name='Паттерны обучения')
+    weak_topics = models.JSONField(default=list, verbose_name='Слабые темы')
+    strong_topics = models.JSONField(default=list, verbose_name='Сильные темы')
+    
+    last_analyzed = models.DateTimeField(auto_now=True, verbose_name='Последний анализ')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Умный профиль обучения'
+        verbose_name_plural = 'Умные профили обучения'
+
+    def __str__(self):
+        return f"Профиль обучения: {self.student.username} ({self.learning_style})"
+
+# ----------------- ExamPrediction -----------------
+class ExamPrediction(models.Model):
+    """Предсказание успеха на экзамене с помощью ML"""
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='exam_predictions')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='exam_predictions')
+    
+    # Предсказания
+    predicted_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Предсказанная оценка'
+    )
+    success_probability = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name='Вероятность успеха (%)'
+    )
+    
+    # Факторы
+    current_avg = models.DecimalField(max_digits=5, decimal_places=2, verbose_name='Текущий средний балл')
+    attendance_rate = models.DecimalField(max_digits=5, decimal_places=2, verbose_name='Посещаемость (%)')
+    assignment_completion = models.DecimalField(max_digits=5, decimal_places=2, verbose_name='Выполнение заданий (%)')
+    
+    # Рекомендации
+    recommended_study_hours = models.IntegerField(default=20, verbose_name='Рекомендуемые часы подготовки')
+    focus_topics = models.JSONField(default=list, verbose_name='Темы для фокуса')
+    risk_factors = models.JSONField(default=list, verbose_name='Факторы риска')
+    
+    # Метаданные
+    confidence = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name='Уверенность модели (%)'
+    )
+    exam_date = models.DateTimeField(null=True, blank=True, verbose_name='Дата экзамена')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Предсказание экзамена'
+        verbose_name_plural = 'Предсказания экзаменов'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Предсказание: {self.student.username} - {self.course.name} ({self.success_probability}%)"
+
+# ----------------- PersonalizedStudyPlan -----------------
+class PersonalizedStudyPlan(models.Model):
+    """Персонализированный план обучения, созданный ИИ"""
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='study_plans')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='study_plans')
+    
+    # План
+    plan_name = models.CharField(max_length=200, verbose_name='Название плана')
+    target_date = models.DateTimeField(verbose_name='Целевая дата')
+    total_hours = models.IntegerField(default=0, verbose_name='Всего часов')
+    
+    # Структура плана
+    daily_schedule = models.JSONField(default=list, verbose_name='Ежедневное расписание')
+    topics_priority = models.JSONField(default=dict, verbose_name='Приоритеты тем')
+    milestones = models.JSONField(default=list, verbose_name='Вехи')
+    
+    # Статус
+    progress = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name='Прогресс (%)'
+    )
+    is_active = models.BooleanField(default=True, verbose_name='Активен')
+    
+    # Метаданные
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Персонализированный план обучения'
+        verbose_name_plural = 'Персонализированные планы обучения'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"План: {self.student.username} - {self.course.name} ({self.progress}%)"

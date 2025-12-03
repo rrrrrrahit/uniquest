@@ -8,7 +8,8 @@ from django.contrib.auth.models import User
 from .models import (
     Specialty, Subject, Group, Profile, Course, Assignment, Submission,
     ProblemPrediction, StudentProgress, Recommendation, ScheduleEntry,
-    Grade, Student, Enrollment, Lecture, Attendance
+    Grade, Student, Enrollment, Lecture, Attendance,
+    SmartLearningProfile, ExamPrediction, PersonalizedStudyPlan
 )
 
 # ----------------- Specialty -----------------
@@ -446,4 +447,25 @@ class GradeAdmin(admin.ModelAdmin):
     list_filter = ('letter_grade', 'course', 'date')
     search_fields = ('student__username', 'course__name', 'assignment_name', 'topic')
     ordering = ('-date',)
+
+@admin.register(SmartLearningProfile)
+class SmartLearningProfileAdmin(admin.ModelAdmin):
+    list_display = ('student', 'learning_style', 'preferred_study_time', 'learning_velocity', 'last_analyzed')
+    list_filter = ('learning_style', 'preferred_study_time')
+    search_fields = ('student__username',)
+    readonly_fields = ('last_analyzed', 'created_at')
+
+@admin.register(ExamPrediction)
+class ExamPredictionAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'predicted_score', 'success_probability', 'confidence', 'created_at')
+    list_filter = ('course', 'created_at')
+    search_fields = ('student__username', 'course__name')
+    readonly_fields = ('created_at',)
+
+@admin.register(PersonalizedStudyPlan)
+class PersonalizedStudyPlanAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'plan_name', 'progress', 'is_active', 'target_date')
+    list_filter = ('is_active', 'course', 'created_at')
+    search_fields = ('student__username', 'course__name', 'plan_name')
+    readonly_fields = ('created_at', 'updated_at')
 

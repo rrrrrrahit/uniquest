@@ -1,0 +1,200 @@
+{% extends 'main/base.html' %}
+{% block title %}Умный ИИ-ассистент обучения{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h1 class="mb-0">
+            <i class="fas fa-brain text-primary me-2"></i>Умный ИИ-ассистент обучения
+          </h1>
+          <p class="text-muted">Персонализированное обучение с использованием машинного обучения</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if learning_profile %}
+  <!-- Профиль обучения -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">
+            <i class="fas fa-user-graduate me-2"></i>Ваш профиль обучения
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <div class="text-center p-3 bg-light rounded">
+                <i class="fas fa-palette fa-3x text-primary mb-2"></i>
+                <h6>Стиль обучения</h6>
+                <p class="mb-0">
+                  <span class="badge bg-primary fs-6">
+                    {{ learning_profile.get_learning_style_display }}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center p-3 bg-light rounded">
+                <i class="fas fa-clock fa-3x text-success mb-2"></i>
+                <h6>Оптимальное время</h6>
+                <p class="mb-0">
+                  <span class="badge bg-success fs-6">
+                    {{ learning_profile.get_preferred_study_time_display }}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center p-3 bg-light rounded">
+                <i class="fas fa-tachometer-alt fa-3x text-info mb-2"></i>
+                <h6>Скорость обучения</h6>
+                <p class="mb-0">
+                  <span class="badge bg-info fs-6">
+                    {{ learning_profile.learning_velocity }}x
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center p-3 bg-light rounded">
+                <i class="fas fa-memory fa-3x text-warning mb-2"></i>
+                <h6>Запоминание</h6>
+                <p class="mb-0">
+                  <span class="badge bg-warning fs-6">
+                    {{ learning_profile.retention_rate }}%
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Курсы с ИИ-анализом -->
+  {% if student_courses %}
+  <div class="row">
+    {% for course in student_courses %}
+    <div class="col-md-6 mb-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-gradient-primary text-white">
+          <h5 class="mb-0">
+            <i class="fas fa-book me-2"></i>{{ course.name }}
+          </h5>
+        </div>
+        <div class="card-body">
+          <!-- Предсказание экзамена -->
+          {% for pred_id, prediction in exam_predictions.items %}
+          {% if pred_id == course.id %}
+          {% with prediction=prediction %}
+          <div class="alert alert-{% if prediction.success_probability >= 70 %}success{% elif prediction.success_probability >= 50 %}warning{% else %}danger{% endif %} mb-3">
+            <h6>
+              <i class="fas fa-crystal-ball me-2"></i>Предсказание успеха
+            </h6>
+            <div class="row">
+              <div class="col-6">
+                <p class="mb-1"><strong>Вероятность успеха:</strong></p>
+                <h3 class="mb-0">{{ prediction.success_probability }}%</h3>
+              </div>
+              <div class="col-6">
+                <p class="mb-1"><strong>Предсказанная оценка:</strong></p>
+                <h3 class="mb-0">{{ prediction.predicted_score }}</h3>
+              </div>
+            </div>
+            {% if prediction.risk_factors %}
+            <div class="mt-2">
+              <small><strong>Факторы риска:</strong> {{ prediction.risk_factors|join:", " }}</small>
+            </div>
+            {% endif %}
+          </div>
+          {% endwith %}
+          {% else %}
+          <form method="post" action="{% url 'predict_exam' course.id %}" class="mb-3">
+            {% csrf_token %}
+            <div class="input-group">
+              <input type="date" name="exam_date" class="form-control" required>
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-crystal-ball me-1"></i>Предсказать успех
+              </button>
+            </div>
+          </form>
+          {% endif %}
+
+          <!-- План обучения -->
+          {% for plan_id, plan in study_plans.items %}
+          {% if plan_id == course.id %}
+          {% with plan=plan %}
+          <div class="card border-info mb-3">
+            <div class="card-header bg-info text-white">
+              <h6 class="mb-0">
+                <i class="fas fa-calendar-check me-2"></i>Персонализированный план
+              </h6>
+            </div>
+            <div class="card-body">
+              <p><strong>Всего часов:</strong> {{ plan.total_hours }}</p>
+              <p><strong>Прогресс:</strong> {{ plan.progress }}%</p>
+              <div class="progress mb-2">
+                <div class="progress-bar" role="progressbar" style="width: {{ plan.progress }}%"></div>
+              </div>
+              <small class="text-muted">Целевая дата: {{ plan.target_date|date:"d.m.Y" }}</small>
+            </div>
+          </div>
+          {% endwith %}
+          {% else %}
+          <form method="post" action="{% url 'create_study_plan' course.id %}" class="mb-3">
+            {% csrf_token %}
+            <div class="input-group">
+              <input type="date" name="target_date" class="form-control" required>
+              <button type="submit" class="btn btn-info">
+                <i class="fas fa-magic me-1"></i>Создать план
+              </button>
+            </div>
+          </form>
+          {% endif %}
+
+          <!-- Рекомендации -->
+          {% for rec_course_id, recs in recommendations.items %}
+          {% if rec_course_id == course.id %}
+          <div class="mt-3">
+            <h6><i class="fas fa-lightbulb me-2 text-warning"></i>ИИ-рекомендации:</h6>
+            {% for rec in recs %}
+            <div class="alert alert-light border-start border-3 border-{{ rec.type|default:'info' }} mb-2">
+              <div class="d-flex align-items-start">
+                <i class="fas {{ rec.icon }} me-2 mt-1"></i>
+                <div>
+                  <strong>{{ rec.title }}</strong>
+                  <p class="mb-0 small">{{ rec.text }}</p>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="alert alert-info">
+    <i class="fas fa-info-circle me-2"></i>Вы не записаны ни на один курс. Запишитесь на курс, чтобы получить ИИ-рекомендации.
+  </div>
+  {% endif %}
+</div>
+
+<style>
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+</style>
+{% endblock %}
+

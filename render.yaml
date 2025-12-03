@@ -46,7 +46,7 @@ services:
         value: uniquest.onrender.com,*.onrender.com
 
   # PostgreSQL база данных
-  - type: pspg
+  - type: pg
     name: uniquest-db
     plan: free  # Бесплатный план
     region: frankfurt

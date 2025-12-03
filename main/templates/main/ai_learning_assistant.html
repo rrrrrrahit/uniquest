@@ -93,9 +93,8 @@
         </div>
         <div class="card-body">
           <!-- Предсказание экзамена -->
-          {% for pred_id, prediction in exam_predictions.items %}
-          {% if pred_id == course.id %}
-          {% with prediction=prediction %}
+          {% with prediction=exam_predictions|get_item:course.id %}
+          {% if prediction %}
           <div class="alert alert-{% if prediction.success_probability >= 70 %}success{% elif prediction.success_probability >= 50 %}warning{% else %}danger{% endif %} mb-3">
             <h6>
               <i class="fas fa-crystal-ball me-2"></i>Предсказание успеха
@@ -112,11 +111,16 @@
             </div>
             {% if prediction.risk_factors %}
             <div class="mt-2">
-              <small><strong>Факторы риска:</strong> {{ prediction.risk_factors|join:", " }}</small>
+              <small><strong>Факторы риска:</strong> 
+                {% if prediction.risk_factors %}
+                  {% for risk in prediction.risk_factors %}{{ risk }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                {% else %}
+                  Нет факторов риска
+                {% endif %}
+              </small>
             </div>
             {% endif %}
           </div>
-          {% endwith %}
           {% else %}
           <form method="post" action="{% url 'predict_exam' course.id %}" class="mb-3">
             {% csrf_token %}
@@ -128,11 +132,11 @@
             </div>
           </form>
           {% endif %}
+          {% endwith %}
 
           <!-- План обучения -->
-          {% for plan_id, plan in study_plans.items %}
-          {% if plan_id == course.id %}
-          {% with plan=plan %}
+          {% with plan=study_plans|get_item:course.id %}
+          {% if plan %}
           <div class="card border-info mb-3">
             <div class="card-header bg-info text-white">
               <h6 class="mb-0">
@@ -148,7 +152,6 @@
               <small class="text-muted">Целевая дата: {{ plan.target_date|date:"d.m.Y" }}</small>
             </div>
           </div>
-          {% endwith %}
           {% else %}
           <form method="post" action="{% url 'create_study_plan' course.id %}" class="mb-3">
             {% csrf_token %}
@@ -160,12 +163,14 @@
             </div>
           </form>
           {% endif %}
+          {% endwith %}
 
           <!-- Рекомендации -->
-          {% if course.id in recommendations %}
+          {% with course_recs=recommendations|get_item:course.id %}
+          {% if course_recs %}
           <div class="mt-3">
             <h6><i class="fas fa-lightbulb me-2 text-warning"></i>ИИ-рекомендации:</h6>
-            {% for rec in recommendations|get_item:course.id %}
+            {% for rec in course_recs %}
             <div class="alert alert-light border-start border-3 border-{{ rec.type|default:'info' }} mb-2">
               <div class="d-flex align-items-start">
                 <i class="fas {{ rec.icon }} me-2 mt-1"></i>
@@ -178,6 +183,7 @@
             {% endfor %}
           </div>
           {% endif %}
+          {% endwith %}
         </div>
       </div>
     </div>
@@ -196,4 +202,3 @@
 }
 </style>
 {% endblock %}
-

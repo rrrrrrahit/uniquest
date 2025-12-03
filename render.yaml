@@ -19,6 +19,30 @@ services:
         generateValue: true
       - key: ALLOWED_HOSTS
         value: uniquest.onrender.com,*.onrender.com
-      # Переменные для базы данных (заполните после создания PostgreSQL вручную)
-      # DATABASE_URL будет автоматически добавлен при подключении базы данных к сервису
+      # Подключение к существующей базе данных
+      - key: DATABASE_URL
+        fromDatabase:
+          name: uniquest1-db
+          property: connectionString
+      # Резервные переменные для базы данных
+      - key: DB_NAME
+        fromDatabase:
+          name: uniquest1-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: uniquest1-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: uniquest1-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: uniquest1-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: uniquest1-db
+          property: port
 

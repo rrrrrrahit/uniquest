@@ -25,9 +25,26 @@ def analyze_learning_style(student):
     )
     
     # Анализируем паттерны обучения
-    enrollments = Enrollment.objects.filter(student__user=student)
-    grades = Grade.objects.filter(student=student)
-    attendances = Attendance.objects.filter(enrollment__student__user=student)
+    try:
+        student_obj = Student.objects.filter(user=student).first()
+        if not student_obj:
+            # Если нет Student объекта, создаем базовый профиль
+            profile, created = SmartLearningProfile.objects.get_or_create(
+                student=student,
+                defaults={'learning_style': 'mixed'}
+            )
+            return profile
+        
+        enrollments = Enrollment.objects.filter(student=student_obj)
+        grades = Grade.objects.filter(student=student)
+        attendances = Attendance.objects.filter(enrollment__student=student_obj)
+    except Exception:
+        # В случае ошибки создаем базовый профиль
+        profile, created = SmartLearningProfile.objects.get_or_create(
+            student=student,
+            defaults={'learning_style': 'mixed'}
+        )
+        return profile
     
     # Анализ по типам заданий
     visual_indicators = 0  # Лекции с визуальным контентом

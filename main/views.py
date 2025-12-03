@@ -46,7 +46,19 @@ def index(request):
 def create_test_student_view(request):
     """Простая страница для создания тестового студента (доступна без авторизации для удобства)"""
     from django.contrib.auth.models import User
-    from datetime import time
+    
+    # Также создаем администратора, если его нет
+    admin_user, admin_created = User.objects.get_or_create(
+        username='admin',
+        defaults={
+            'email': 'admin@uniquest.kz',
+            'is_staff': True,
+            'is_superuser': True,
+        }
+    )
+    if admin_created:
+        admin_user.set_password('admin123456')
+        admin_user.save()
     
     if request.method == 'POST':
         try:

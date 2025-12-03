@@ -96,12 +96,120 @@ class ScheduleEntryAdmin(admin.ModelAdmin):
     ordering = ('weekday', 'start_time')
 
 # ----------------- Student -----------------
+def create_test_student_action(modeladmin, request, queryset):
+    """Admin action для создания тестового студента"""
+    try:
+        from datetime import time
+        
+        # Создаем или получаем группу
+        group, created = Group.objects.get_or_create(
+            name='CS-101',
+            defaults={'year': timezone.now().year}
+        )
+        
+        # Создаем или получаем пользователя
+        username = 'test_student'
+        password = 'test123456'
+        
+        user, created = User.objects.get_or_create(
+            username=username,
+            defaults={
+                'email': 'test_student@example.com',
+                'first_name': 'Тестовый',
+                'last_name': 'Студент',
+            }
+        )
+        
+        if created:
+            user.set_password(password)
+            user.save()
+        
+        # Создаем или обновляем профиль
+        profile, created = Profile.objects.get_or_create(
+            user=user,
+            defaults={
+                'role': Profile.ROLE_STUDENT,
+                'group': group,
+            }
+        )
+        if not created:
+            profile.group = group
+            profile.role = Profile.ROLE_STUDENT
+            profile.save()
+        
+        # Создаем или получаем студента
+        student, created = Student.objects.get_or_create(
+            user=user,
+            defaults={
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'email': user.email,
+                'group': group,
+            }
+        )
+        if not created:
+            student.group = group
+            student.save()
+        
+        # Создаем тестовые курсы
+        courses_data = [
+            {'name': 'Введение в программирование', 'code': 'CS101'},
+            {'name': 'Базы данных', 'code': 'CS102'},
+            {'name': 'Веб-разработка', 'code': 'CS201'},
+        ]
+        
+        courses = []
+        for course_data in courses_data:
+            course, created = Course.objects.get_or_create(
+                code=course_data['code'],
+                defaults={
+                    'name': course_data['name'],
+                    'description': f'Описание курса {course_data["name"]}',
+                    'credits': 3,
+                }
+            )
+            courses.append(course)
+        
+        # Создаем записи на курсы
+        for course in courses:
+            Enrollment.objects.get_or_create(
+                student=student,
+                course=course,
+            )
+        
+        # Создаем расписание
+        schedule_data = [
+            {'weekday': 0, 'start_time': '09:00', 'end_time': '10:30', 'course': courses[0]},
+            {'weekday': 1, 'start_time': '10:40', 'end_time': '12:10', 'course': courses[1]},
+            {'weekday': 2, 'start_time': '13:00', 'end_time': '14:30', 'course': courses[2]},
+            {'weekday': 3, 'start_time': '09:00', 'end_time': '10:30', 'course': courses[0]},
+            {'weekday': 4, 'start_time': '10:40', 'end_time': '12:10', 'course': courses[1]},
+        ]
+        
+        for sched_data in schedule_data:
+            entry, created = ScheduleEntry.objects.get_or_create(
+                course=sched_data['course'],
+                weekday=sched_data['weekday'],
+                start_time=sched_data['start_time'],
+                end_time=sched_data['end_time'],
+                defaults={'classroom': 'Аудитория 101'}
+            )
+            if created or not entry.groups.filter(id=profile.id).exists():
+                entry.groups.add(profile)
+        
+        messages.success(request, f'✅ Тестовый студент создан! Логин: {username}, Пароль: {password}')
+    except Exception as e:
+        messages.error(request, f'Ошибка: {str(e)}')
+
+create_test_student_action.short_description = "Создать тестового студента (test_student / test123456)"
+
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
     list_display = ('last_name', 'first_name', 'email', 'group', 'is_active', 'created_at')
     list_filter = ('group', 'is_active')
     search_fields = ('first_name', 'last_name', 'email')
     ordering = ('last_name', 'first_name')
+    actions = [create_test_student_action]
 
 # ----------------- Enrollment -----------------
 @admin.register(Enrollment)
@@ -135,147 +243,3 @@ class GradeAdmin(admin.ModelAdmin):
     search_fields = ('student__username', 'course__name', 'assignment_name', 'topic')
     ordering = ('-date',)
 
-# Кастомная админка для создания тестового студента
-class CustomAdminSite(admin.AdminSite):
-    site_header = "UniQuest Администрирование"
-    site_title = "UniQuest Admin"
-    index_title = "Панель управления"
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('create-test-student/', self.create_test_student_view, name='create_test_student'),
-        ]
-        return custom_urls + urls
-
-    def create_test_student_view(self, request):
-        """Создает тестового студента через админку"""
-        if not request.user.is_staff:
-            return HttpResponse("Доступ запрещен", status=403)
-        
-        try:
-            from main.models import Group, Profile, Student, Course, ScheduleEntry, Enrollment
-            from datetime import time
-            
-            # Создаем или получаем группу
-            group, created = Group.objects.get_or_create(
-                name='CS-101',
-                defaults={'year': timezone.now().year}
-            )
-            
-            # Создаем или получаем пользователя
-            username = 'test_student'
-            password = 'test123456'
-            
-            user, created = User.objects.get_or_create(
-                username=username,
-                defaults={
-                    'email': 'test_student@example.com',
-                    'first_name': 'Тестовый',
-                    'last_name': 'Студент',
-                }
-            )
-            
-            if created:
-                user.set_password(password)
-                user.save()
-            
-            # Создаем или обновляем профиль
-            profile, created = Profile.objects.get_or_create(
-                user=user,
-                defaults={
-                    'role': Profile.ROLE_STUDENT,
-                    'group': group,
-                }
-            )
-            if not created:
-                profile.group = group
-                profile.role = Profile.ROLE_STUDENT
-                profile.save()
-            
-            # Создаем или получаем студента
-            student, created = Student.objects.get_or_create(
-                user=user,
-                defaults={
-                    'first_name': user.first_name,
-                    'last_name': user.last_name,
-                    'email': user.email,
-                    'group': group,
-                }
-            )
-            if not created:
-                student.group = group
-                student.save()
-            
-            # Создаем тестовые курсы
-            courses_data = [
-                {'name': 'Введение в программирование', 'code': 'CS101'},
-                {'name': 'Базы данных', 'code': 'CS102'},
-                {'name': 'Веб-разработка', 'code': 'CS201'},
-            ]
-            
-            courses = []
-            for course_data in courses_data:
-                course, created = Course.objects.get_or_create(
-                    code=course_data['code'],
-                    defaults={
-                        'name': course_data['name'],
-                        'description': f'Описание курса {course_data["name"]}',
-                        'credits': 3,
-                    }
-                )
-                courses.append(course)
-            
-            # Создаем записи на курсы
-            for course in courses:
-                Enrollment.objects.get_or_create(
-                    student=student,
-                    course=course,
-                )
-            
-            # Создаем расписание
-            schedule_data = [
-                {'weekday': 0, 'start_time': '09:00', 'end_time': '10:30', 'course': courses[0]},
-                {'weekday': 1, 'start_time': '10:40', 'end_time': '12:10', 'course': courses[1]},
-                {'weekday': 2, 'start_time': '13:00', 'end_time': '14:30', 'course': courses[2]},
-                {'weekday': 3, 'start_time': '09:00', 'end_time': '10:30', 'course': courses[0]},
-                {'weekday': 4, 'start_time': '10:40', 'end_time': '12:10', 'course': courses[1]},
-            ]
-            
-            for sched_data in schedule_data:
-                entry, created = ScheduleEntry.objects.get_or_create(
-                    course=sched_data['course'],
-                    weekday=sched_data['weekday'],
-                    start_time=sched_data['start_time'],
-                    end_time=sched_data['end_time'],
-                    defaults={'classroom': 'Аудитория 101'}
-                )
-                if created or not entry.groups.filter(id=profile.id).exists():
-                    entry.groups.add(profile)
-            
-            messages.success(request, f'✅ Тестовый студент создан успешно!<br>Логин: <strong>{username}</strong><br>Пароль: <strong>{password}</strong>')
-        except Exception as e:
-            messages.error(request, f'Ошибка при создании студента: {str(e)}')
-        
-        return redirect('admin:index')
-
-# Используем кастомную админку
-admin_site = CustomAdminSite(name='admin')
-
-# Регистрируем все модели в кастомной админке
-admin_site.register(Specialty, SpecialtyAdmin)
-admin_site.register(Subject, SubjectAdmin)
-admin_site.register(Group, GroupAdmin)
-admin_site.register(Profile, ProfileAdmin)
-admin_site.register(Course, CourseAdmin)
-admin_site.register(Assignment, AssignmentAdmin)
-admin_site.register(Submission, SubmissionAdmin)
-admin_site.register(ProblemPrediction, ProblemPredictionAdmin)
-admin_site.register(StudentProgress, StudentProgressAdmin)
-admin_site.register(Recommendation, RecommendationAdmin)
-admin_site.register(ScheduleEntry, ScheduleEntryAdmin)
-admin_site.register(Student, StudentAdmin)
-admin_site.register(Enrollment, EnrollmentAdmin)
-admin_site.register(Lecture, LectureAdmin)
-admin_site.register(Attendance, AttendanceAdmin)
-admin_site.register(Grade, GradeAdmin)

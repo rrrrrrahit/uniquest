@@ -1,13 +1,10 @@
 import os
 from pathlib import Path
 from django.core.management.utils import get_random_secret_key
+from dotenv import load_dotenv
 
-# Попытка загрузить .env файл (если есть)
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # python-dotenv не установлен, продолжаем без него
+# Загружаем .env
+load_dotenv()
 
 # --- ПУТИ ---
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -16,24 +13,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', get_random_secret_key())
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-# Разрешенные хосты для публичного доступа
-# Автоматическое определение хостов для облачных платформ
+# --- ALLOWED_HOSTS ---
 ALLOWED_HOSTS_ENV = os.environ.get('ALLOWED_HOSTS', '')
 if ALLOWED_HOSTS_ENV:
     ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(',')]
 else:
-    ALLOWED_HOSTS = ['*']  # Для публичного доступа разрешаем все хосты
+    ALLOWED_HOSTS = ['*']
 
-# Автоматическое добавление хостов облачных платформ
-if 'RAILWAY_STATIC_URL' in os.environ:
-    ALLOWED_HOSTS.append(os.environ.get('RAILWAY_PUBLIC_DOMAIN', ''))
-if 'RENDER' in os.environ or 'RENDER_EXTERNAL_HOSTNAME' in os.environ:
-    render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
-    if render_host:
+# Автоматическое добавление хостов Render
+render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if render_host:
+    if render_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(render_host)
-    ALLOWED_HOSTS.append('*.onrender.com')  # Все Render поддомены
-if 'FLY_APP_NAME' in os.environ:
-    ALLOWED_HOSTS.append(f"{os.environ.get('FLY_APP_NAME')}.fly.dev")
+    if '*.onrender.com' not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append('*.onrender.com')
 
 # Безопасность для production
 if not DEBUG:
@@ -52,15 +45,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # сюда добавляем наше приложение
-    'main',  # если ты назвала приложение main
+    'main',
 ]
-
 
 # --- МИДЛВАР ---
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Для статики в production
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -89,63 +80,81 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'uniquest.wsgi.application'
 
-# --- БАЗА ДАННЫХ (PostgreSQL) ---
-# Поддержка Render и других облачных платформ
-try:
-    import dj_database_url
-    DATABASE_URL_AVAILABLE = True
-except ImportError:
-    DATABASE_URL_AVAILABLE = False
-
-# Базовая конфигурация базы данных
+# --- БАЗА ДАННЫХ ---
+# Приоритет: DATABASE_URL (от Render) > отдельные переменные > значения по умолчанию
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'uniquestus'),
-        'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'Ssssuro4ka.'),
-        'HOST': os.environ.get('DB_HOST', os.environ.get('PGHOST', 'localhost')),
-        'PORT': os.environ.get('DB_PORT', os.environ.get('PGPORT', '5432')),
+        'USER': os.environ.get('DB_USER', 'uniquest_user'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {
             'connect_timeout': 10,
-            'options': '-c timezone=Asia/Almaty'
         },
-        'CONN_MAX_AGE': 600,  # Поддержание соединения
+        'CONN_MAX_AGE': 600,
     }
 }
 
-# Автоматическое использование DATABASE_URL (Render, Heroku и др.)
-if DATABASE_URL_AVAILABLE and 'DATABASE_URL' in os.environ:
-    DATABASES['default'] = dj_database_url.config(
-        conn_max_age=600,
-        conn_health_checks=True,
-        default=os.environ.get('DATABASE_URL')
-    )
-
-# Резервная SQLite база (если PostgreSQL недоступна)
-# Раскомментируйте, если нужна резервная база
-# DATABASES['default'] = {
-#     'ENGINE': 'django.db.backends.sqlite3',
-#     'NAME': BASE_DIR / 'db.sqlite3',
-# }
-
-
-
+# Использование DATABASE_URL от Render (приоритет)
+if 'DATABASE_URL' in os.environ:
+    try:
+        import dj_database_url
+        DATABASES['default'] = dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    except ImportError:
+        # Если dj-database-url не установлен, парсим вручную
+        import urllib.parse
+        db_url = os.environ.get('DATABASE_URL')
+        if db_url:
+            parsed = urllib.parse.urlparse(db_url)
+            DATABASES['default'] = {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': parsed.path[1:] if parsed.path.startswith('/') else parsed.path,
+                'USER': parsed.username,
+                'PASSWORD': parsed.password,
+                'HOST': parsed.hostname,
+                'PORT': parsed.port or '5432',
+                'OPTIONS': {
+                    'connect_timeout': 10,
+                },
+                'CONN_MAX_AGE': 600,
+            }
+else:
+    # Если DATABASE_URL не установлен, используем отдельные переменные
+    # Проверяем, что есть хотя бы HOST (не localhost) или PASSWORD (значит настроено)
+    db_host = os.environ.get('DB_HOST', '')
+    db_password = os.environ.get('DB_PASSWORD', '')
+    
+    if db_host and db_host != 'localhost' and 'localhost' not in db_host:
+        # Используем отдельные переменные если HOST указан и не localhost
+        DATABASES['default'].update({
+            'NAME': os.environ.get('DB_NAME', DATABASES['default']['NAME']),
+            'USER': os.environ.get('DB_USER', DATABASES['default']['USER']),
+            'PASSWORD': db_password or DATABASES['default']['PASSWORD'],
+            'HOST': db_host,
+            'PORT': os.environ.get('DB_PORT', DATABASES['default']['PORT']),
+        })
+    elif db_password and db_password != DATABASES['default']['PASSWORD']:
+        # Если есть пароль от Render, используем его с другими переменными
+        DATABASES['default'].update({
+            'NAME': os.environ.get('DB_NAME', DATABASES['default']['NAME']),
+            'USER': os.environ.get('DB_USER', DATABASES['default']['USER']),
+            'PASSWORD': db_password,
+            'HOST': db_host or DATABASES['default']['HOST'],
+            'PORT': os.environ.get('DB_PORT', DATABASES['default']['PORT']),
+        })
 
 # --- ПАРОЛИ ---
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # --- ЛОКАЛЬНЫЕ НАСТРОЙКИ ---
@@ -156,14 +165,12 @@ USE_L10N = True
 USE_TZ = True
 
 # --- СТАТИКА ---
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # Для production
-
-# WhiteNoise для статики
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Медиа файлы (загрузки пользователей)
+# --- МЕДИА ---
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 

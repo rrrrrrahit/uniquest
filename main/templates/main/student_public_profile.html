@@ -1,0 +1,60 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Профиль студента {{ student_obj.last_name }} {{ student_obj.first_name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="mb-3">Профиль студента</h1>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h4 class="card-title">{{ student_obj.last_name }} {{ student_obj.first_name }}</h4>
+      <p class="card-text mb-1"><strong>Email:</strong> {{ student_obj.email }}</p>
+      <p class="card-text mb-1"><strong>Группа:</strong> {{ student_obj.group }}</p>
+      <p class="card-text mb-1"><strong>Активен:</strong> {{ student_obj.is_active|yesno:"Да,Нет" }}</p>
+      {% if student_obj.dob %}
+      <p class="card-text mb-1"><strong>Дата рождения:</strong> {{ student_obj.dob }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <h3>Курсы и успеваемость</h3>
+  {% if course_stats %}
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        <th>Курс</th>
+        <th>Посещаемость</th>
+        <th>Средний балл</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cs in course_stats %}
+      <tr>
+        <td><a href="{% url 'course_detail' cs.course.id %}">{{ cs.course.name }}</a></td>
+        <td>
+          {% if cs.attendance_rate %}
+            {{ cs.attendance_rate|floatformat:1 }} %
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td>
+          {% if cs.avg_grade %}
+            {{ cs.avg_grade|floatformat:1 }}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>У студента пока нет записей на курсы.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+
+

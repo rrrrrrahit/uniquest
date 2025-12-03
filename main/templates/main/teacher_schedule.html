@@ -15,17 +15,17 @@
               <th>Время</th>
               <th>Курс</th>
               <th>Место</th>
-              <th>Примечание</th>
+              <th>Группа</th>
             </tr>
           </thead>
           <tbody>
             {% for entry in schedule %}
               <tr>
-                <td>{{ entry.weekday }}</td>
+                <td>{{ entry.get_weekday_display }}</td>
                 <td>{{ entry.start_time }} - {{ entry.end_time }}</td>
-                <td>{{ entry.course.title }}</td>
-                <td>{{ entry.location }}</td>
-                <td>{{ entry.note }}</td>
+                <td>{{ entry.course.name }}</td>
+                <td>{{ entry.classroom|default:"—" }}</td>
+                <td>{{ entry.group.name|default:"—" }}</td>
               </tr>
             {% endfor %}
           </tbody>

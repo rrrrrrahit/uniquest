@@ -1,0 +1,38 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Расписание группы {{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="mb-3">Расписание группы {{ group.name }}</h1>
+  <p class="text-muted">Год набора: {{ group.year }}</p>
+
+  {% if schedule %}
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>День недели</th>
+        <th>Время</th>
+        <th>Курс</th>
+        <th>Аудитория</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in schedule %}
+      <tr>
+        <td>{{ entry.get_weekday_display }}</td>
+        <td>{{ entry.start_time }} — {{ entry.end_time }}</td>
+        <td><a href="{% url 'course_detail' entry.course.id %}">{{ entry.course.name }}</a></td>
+        <td>{{ entry.classroom }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Для этой группы пока нет расписания.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+
+

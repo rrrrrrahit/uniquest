@@ -14,10 +14,10 @@
   <tbody>
     {% for g in grades %}
       <tr>
-        <td><a href="{% url 'course_detail' g.course.pk %}">{{ g.course.title }}</a></td>
-        <td>{{ g.grade }}</td>
-        <td>{{ g.date }}</td>
-        <td>{{ g.note }}</td>
+        <td><a href="{% url 'course_detail' g.course.pk %}">{{ g.course.name }}</a></td>
+        <td><span class="badge {% if g.value >= 90 %}bg-success{% elif g.value >= 80 %}bg-info{% elif g.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">{{ g.value }} ({{ g.letter_grade }})</span></td>
+        <td>{{ g.date|date:"d.m.Y" }}</td>
+        <td>{{ g.comment|default:"—" }}</td>
       </tr>
     {% empty %}
       <tr><td colspan="4" class="text-muted">Оценок пока нет.</td></tr>

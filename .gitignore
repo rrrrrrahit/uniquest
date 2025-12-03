@@ -37,6 +37,7 @@ db.sqlite3
 db.sqlite3-journal
 /media
 /staticfiles
+seed_log.txt
 
 # Environment variables
 .env
@@ -45,6 +46,7 @@ db.sqlite3-journal
 
 # IDE
 .vscode/
+.cursor/
 .idea/
 *.swp
 *.swo

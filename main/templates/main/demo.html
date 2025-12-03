@@ -1,0 +1,72 @@
+{% extends 'main/base.html' %}
+
+{% block title %}Демо UniQuest{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="mb-3">Демо UniQuest</h1>
+  <p class="text-muted">
+    Эта страница показывает примерные данные: студентов, курсы и поиск по лекциям.
+    Можно пользоваться даже без авторизации.
+  </p>
+
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <h4>Примерные студенты</h4>
+      <ul class="list-group">
+        {% for s in students %}
+        <li class="list-group-item">
+          <a href="{% url 'student_public_profile' s.id %}">
+            {{ s.last_name }} {{ s.first_name }}
+          </a>
+          {% if s.group %}<span class="text-muted"> — {{ s.group }}</span>{% endif %}
+        </li>
+        {% empty %}
+        <li class="list-group-item">Студентов пока нет.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="col-md-6">
+      <h4>Примерные курсы</h4>
+      <ul class="list-group">
+        {% for c in courses %}
+        <li class="list-group-item">
+          <a href="{% url 'course_detail' c.id %}">{{ c.name }}</a>
+        </li>
+        {% empty %}
+        <li class="list-group-item">Курсов пока нет.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <hr>
+
+  <h3>Поиск по лекциям (семантический)</h3>
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-8">
+      <input type="text" class="form-control" name="q" placeholder="Например: машинное обучение, базы данных, веб-разработка" value="{{ q }}">
+    </div>
+    <div class="col-md-4">
+      <button class="btn btn-primary" type="submit">Искать</button>
+    </div>
+  </form>
+
+  {% if q and results %}
+  <p>Результаты поиска по запросу «{{ q }}»:</p>
+  <ul class="list-group mb-4">
+    {% for item in results %}
+    <li class="list-group-item">
+      <a href="{% url 'lecture_detail' item.id %}"><strong>{{ item.title }}</strong></a>
+      <p class="mb-1 text-muted">{{ item.snippet }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif q %}
+  <p>По запросу «{{ q }}» ничего не найдено.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+
+

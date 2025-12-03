@@ -22,10 +22,10 @@
             {% for grade in grades %}
               <tr>
                 <td>{{ grade.student.get_full_name|default:grade.student.username }}</td>
-                <td>{{ grade.course.title }}</td>
-                <td><span class="badge bg-primary">{{ grade.grade }}</span></td>
-                <td>{{ grade.date }}</td>
-                <td>{{ grade.note }}</td>
+                <td>{{ grade.course.name }}</td>
+                <td><span class="badge bg-primary">{{ grade.value }} ({{ grade.letter_grade }})</span></td>
+                <td>{{ grade.date|date:"d.m.Y" }}</td>
+                <td>{{ grade.comment|default:"—" }}</td>
               </tr>
             {% endfor %}
           </tbody>

@@ -14,10 +14,10 @@
   <tbody>
     {% for entry in schedule %}
       <tr>
-        <td>{{ entry.weekday }}</td>
-        <td><a href="{% url 'course_detail' entry.course.pk %}">{{ entry.course.title }}</a></td>
+        <td>{{ entry.get_weekday_display }}</td>
+        <td><a href="{% url 'course_detail' entry.course.pk %}">{{ entry.course.name }}</a></td>
         <td>{{ entry.start_time }} — {{ entry.end_time }}</td>
-        <td>{{ entry.location }}</td>
+        <td>{{ entry.classroom|default:"—" }}</td>
       </tr>
     {% empty %}
       <tr><td colspan="4" class="text-muted">Расписание пусто.</td></tr>

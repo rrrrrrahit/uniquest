@@ -1,5 +1,6 @@
 from django.db import migrations, models
 import django.db.models.deletion
+from django.db.migrations.operations import RunSQL
 
 
 class Migration(migrations.Migration):
@@ -9,6 +10,25 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Проверяем, существует ли поле group_id, и добавляем только если его нет
+        migrations.RunSQL(
+            sql="""
+                DO $$ 
+                BEGIN
+                    -- Добавляем поле group_id только если его еще нет
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name='main_scheduleentry' AND column_name='group_id'
+                    ) THEN
+                        ALTER TABLE main_scheduleentry 
+                        ADD COLUMN group_id INTEGER NULL 
+                        REFERENCES main_group(id) ON DELETE SET NULL;
+                    END IF;
+                END $$;
+            """,
+            reverse_sql="-- Reverse migration not needed",
+        ),
+        # Добавляем поле в состояние Django (для совместимости)
         migrations.AddField(
             model_name="scheduleentry",
             name="group",

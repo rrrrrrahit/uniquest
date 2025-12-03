@@ -28,21 +28,29 @@ class Migration(migrations.Migration):
             new_name='main_studen_email_dad883_idx',
             old_name='main_studen_email_idx',
         ),
-        # Сначала удаляем старое поле vector_embedding (если оно было типа double precision[])
+        # Удаляем старое поле vector_embedding (если оно было типа double precision[])
+        # и добавляем новое как JSONField
         migrations.RunSQL(
-            # Удаляем старое поле, если оно существует
-            sql="ALTER TABLE main_lecture DROP COLUMN IF EXISTS vector_embedding;",
+            sql="""
+                DO $$ 
+                BEGIN
+                    -- Удаляем старое поле, если оно существует
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name='main_lecture' AND column_name='vector_embedding'
+                    ) THEN
+                        ALTER TABLE main_lecture DROP COLUMN vector_embedding;
+                    END IF;
+                    
+                    -- Добавляем новое поле как JSONB, если его еще нет
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name='main_lecture' AND column_name='vector_embedding'
+                    ) THEN
+                        ALTER TABLE main_lecture ADD COLUMN vector_embedding JSONB;
+                    END IF;
+                END $$;
+            """,
             reverse_sql="-- Reverse migration not needed",
-        ),
-        # Затем добавляем новое поле как JSONField
-        migrations.AddField(
-            model_name='lecture',
-            name='vector_embedding',
-            field=models.JSONField(
-                blank=True,
-                null=True,
-                help_text='Embedding для семантического поиска',
-                verbose_name='Векторное представление',
-            ),
         ),
     ]

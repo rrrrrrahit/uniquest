@@ -1,0 +1,71 @@
+{% extends 'main/base.html' %}
+{% block title %}Создать тестового учителя{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-tie me-2"></i>Создать тестового учителя
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Эта страница создаст тестового учителя с курсами, расписанием, лекциями и оценками студентов.
+                    </p>
+                    
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <p><strong>Будет создан учитель:</strong></p>
+                            <ul>
+                                <li><strong>Логин:</strong> test_teacher</li>
+                                <li><strong>Пароль:</strong> teacher123456</li>
+                                <li><strong>Email:</strong> test_teacher@uniquest.kz</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <p><strong>Будут созданы:</strong></p>
+                            <ul>
+                                <li>3 курса (Введение в программирование, Базы данных, Веб-разработка)</li>
+                                <li>Расписание для каждого курса</li>
+                                <li>10 лекций на каждый курс</li>
+                                <li>5 заданий на каждый курс</li>
+                                <li>Оценки для студентов (если они есть)</li>
+                            </ul>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-lg w-100">
+                            <i class="fas fa-user-plus me-2"></i>Создать тестового учителя
+                        </button>
+                    </form>
+                    
+                    <hr>
+                    
+                    <div class="text-center">
+                        <a href="{% url 'login' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-sign-in-alt me-2"></i>Войти
+                        </a>
+                        <a href="{% url 'create_test_student' %}" class="btn btn-outline-info">
+                            <i class="fas fa-user-graduate me-2"></i>Создать студента
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

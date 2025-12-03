@@ -159,54 +159,81 @@ def create_test_student_view(request):
                 if created or not entry.groups.filter(id=profile.id).exists():
                     entry.groups.add(profile)
             
-            # Создаем тестовые задания
+            # Создаем тестовые задания (много для демонстрации ИИ)
             from .models import Lecture, Assignment, Submission
             assignments_data = []
+            
+            # Разные темы для каждого курса
+            course_topics_map = {
+                courses[0].id: ['Основы Python', 'Переменные и типы', 'Условия и циклы', 'Функции', 'Списки и словари', 'ООП', 'Модули', 'Обработка ошибок', 'Файлы', 'Регулярные выражения'],
+                courses[1].id: ['SQL основы', 'SELECT запросы', 'JOIN операции', 'Агрегатные функции', 'Подзапросы', 'Нормализация БД', 'Индексы', 'Транзакции', 'Триггеры', 'Оптимизация'],
+                courses[2].id: ['HTML структура', 'CSS стилизация', 'JavaScript основы', 'DOM манипуляции', 'События', 'AJAX', 'JSON', 'LocalStorage', 'Асинхронность', 'Фреймворки'],
+            }
+            
             for i, course in enumerate(courses):
-                course_assignments = [
-                    {
-                        'title': f'Домашнее задание 1 - {course.name}',
+                topics = course_topics_map.get(course.id, ['Тема 1', 'Тема 2', 'Тема 3'])
+                
+                # Создаем много заданий разных типов
+                course_assignments = []
+                
+                # Домашние задания (10 штук)
+                for hw_num in range(1, 11):
+                    topic_idx = (hw_num - 1) % len(topics)
+                    course_assignments.append({
+                        'title': f'Домашнее задание {hw_num} - {topics[topic_idx]}',
                         'assignment_type': 'homework',
-                        'topic': 'Основы',
+                        'topic': topics[topic_idx],
                         'max_score': 100,
-                        'days_offset': -30,
-                    },
-                    {
-                        'title': f'Контрольная работа 1 - {course.name}',
+                        'days_offset': -60 + hw_num * 5,  # Распределяем за 60 дней
+                    })
+                
+                # Контрольные работы (5 штук)
+                for quiz_num in range(1, 6):
+                    topic_idx = (quiz_num * 2 - 1) % len(topics)
+                    course_assignments.append({
+                        'title': f'Контрольная работа {quiz_num} - {topics[topic_idx]}',
                         'assignment_type': 'quiz',
-                        'topic': 'Основы',
+                        'topic': topics[topic_idx],
                         'max_score': 100,
-                        'days_offset': -25,
-                    },
-                    {
-                        'title': f'Лабораторная работа 1 - {course.name}',
+                        'days_offset': -50 + quiz_num * 8,
+                    })
+                
+                # Лабораторные работы (8 штук)
+                for lab_num in range(1, 9):
+                    topic_idx = (lab_num * 3 - 2) % len(topics)
+                    course_assignments.append({
+                        'title': f'Лабораторная работа {lab_num} - {topics[topic_idx]}',
                         'assignment_type': 'lab',
-                        'topic': 'Практика',
+                        'topic': topics[topic_idx],
                         'max_score': 100,
-                        'days_offset': -20,
-                    },
-                    {
-                        'title': f'Проект - {course.name}',
+                        'days_offset': -45 + lab_num * 5,
+                    })
+                
+                # Проекты (3 штуки)
+                for proj_num in range(1, 4):
+                    course_assignments.append({
+                        'title': f'Проект {proj_num} - {course.name}',
                         'assignment_type': 'project',
                         'topic': 'Проектирование',
                         'max_score': 100,
-                        'days_offset': -15,
-                    },
-                    {
-                        'title': f'Домашнее задание 2 - {course.name}',
-                        'assignment_type': 'homework',
-                        'topic': 'Продвинутые темы',
-                        'max_score': 100,
-                        'days_offset': -10,
-                    },
-                    {
-                        'title': f'Контрольная работа 2 - {course.name}',
-                        'assignment_type': 'quiz',
-                        'topic': 'Продвинутые темы',
-                        'max_score': 100,
-                        'days_offset': -5,
-                    },
-                ]
+                        'days_offset': -30 + proj_num * 10,
+                    })
+                
+                # Итого: 26 заданий на курс
+                for ass_data in course_assignments:
+                    due_date = timezone.now() + timedelta(days=ass_data['days_offset'])
+                    assignment, created = Assignment.objects.get_or_create(
+                        course=course,
+                        title=ass_data['title'],
+                        defaults={
+                            'description': f'Подробное описание задания: {ass_data["title"]}. Это задание проверяет понимание темы "{ass_data["topic"]}".',
+                            'due_date': due_date,
+                            'assignment_type': ass_data['assignment_type'],
+                            'topic': ass_data['topic'],
+                            'max_score': ass_data['max_score'],
+                        }
+                    )
+                    assignments_data.append((assignment, course))
                 for ass_data in course_assignments:
                     due_date = timezone.now() + timedelta(days=ass_data['days_offset'])
                     assignment, created = Assignment.objects.get_or_create(
@@ -222,40 +249,61 @@ def create_test_student_view(request):
                     )
                     assignments_data.append((assignment, course))
             
-            # Создаем оценки для тестового студента (разнообразные для демонстрации ИИ)
+            # Создаем оценки для тестового студента (много разнообразных для демонстрации ИИ)
             from .models import Grade
             import random
             random.seed(42)  # Для воспроизводимости
             
-            # Паттерн оценок: начинаем хорошо, потом немного хуже, потом улучшаемся
+            # Реалистичные паттерны оценок с трендами для каждого курса
+            # Введение в программирование: начинаем хорошо, потом падение, затем восстановление
+            python_grades = [88, 92, 85, 78, 82, 90, 88, 95, 92, 89,  # ДЗ
+                            85, 80, 88, 82, 90,  # Контрольные
+                            90, 85, 88, 92, 87, 89, 91, 88, 90,  # Лабораторные
+                            95, 92, 98]  # Проекты
+            
+            # Базы данных: средние оценки с постепенным улучшением
+            db_grades = [72, 68, 70, 75, 73, 78, 75, 80, 78, 82,  # ДЗ
+                         65, 70, 72, 75, 78,  # Контрольные
+                         70, 72, 75, 78, 80, 82, 85, 83, 88,  # Лабораторные
+                         85, 88, 90]  # Проекты
+            
+            # Веб-разработка: отличные оценки с небольшими колебаниями
+            web_grades = [93, 95, 90, 92, 94, 96, 93, 97, 95, 94,  # ДЗ
+                          90, 92, 95, 93, 96,  # Контрольные
+                          94, 96, 93, 95, 97, 94, 96, 98, 95,  # Лабораторные
+                          98, 97, 99]  # Проекты
+            
             grade_patterns = {
-                courses[0].id: [85, 90, 75, 88, 82, 95],  # Введение в программирование - хорошие оценки
-                courses[1].id: [70, 65, 72, 68, 75, 80],   # Базы данных - средние, улучшаются
-                courses[2].id: [92, 88, 95, 90, 93, 97],   # Веб-разработка - отличные оценки
+                courses[0].id: python_grades,
+                courses[1].id: db_grades,
+                courses[2].id: web_grades,
             }
             
-            topics_by_course = {
-                courses[0].id: ['Основы Python', 'Переменные', 'Циклы', 'Функции', 'ООП', 'Практика'],
-                courses[1].id: ['SQL основы', 'SELECT', 'JOIN', 'Нормализация', 'Индексы', 'Практика'],
-                courses[2].id: ['HTML', 'CSS', 'JavaScript', 'DOM', 'AJAX', 'Практика'],
-            }
-            
+            # Создаем оценки для всех заданий
+            assignment_idx = 0
             for assignment, course in assignments_data:
-                # Получаем паттерн оценок для курса
-                course_grades = grade_patterns.get(course.id, [75, 80, 70, 85, 75, 90])
-                course_topics = topics_by_course.get(course.id, ['Общее', 'Общее', 'Общее', 'Общее', 'Общее', 'Общее'])
+                course_grades = grade_patterns.get(course.id, [75] * 26)
                 
-                # Выбираем оценку из паттерна (циклически)
-                grade_index = assignments_data.index((assignment, course)) % len(course_grades)
-                grade_value = course_grades[grade_index]
-                topic = course_topics[grade_index % len(course_topics)]
+                # Берем оценку из паттерна (циклически)
+                grade_value = course_grades[assignment_idx % len(course_grades)]
                 
-                # Добавляем небольшую случайность
-                grade_value += random.randint(-3, 3)
+                # Добавляем реалистичную вариацию
+                variation = random.randint(-2, 2)
+                grade_value += variation
                 grade_value = max(50, min(100, grade_value))  # Ограничиваем 50-100
                 
-                # Дата оценки (несколько дней после дедлайна задания)
-                grade_date = assignment.due_date + timedelta(days=random.randint(1, 3))
+                # Дата оценки (1-5 дней после дедлайна)
+                grade_date = assignment.due_date + timedelta(days=random.randint(1, 5))
+                
+                # Комментарии в зависимости от оценки
+                if grade_value >= 90:
+                    comment = f'Отличная работа! Продолжайте в том же духе.'
+                elif grade_value >= 80:
+                    comment = f'Хорошая работа. Есть небольшие замечания.'
+                elif grade_value >= 70:
+                    comment = f'Удовлетворительно. Рекомендуется повторить материал.'
+                else:
+                    comment = f'Требуется дополнительная подготовка по теме "{assignment.topic}".'
                 
                 # Создаем оценку
                 grade, created = Grade.objects.get_or_create(
@@ -264,82 +312,134 @@ def create_test_student_view(request):
                     assignment=assignment,
                     defaults={
                         'value': grade_value,
-                        'topic': topic,
+                        'topic': assignment.topic,
                         'date': grade_date,
                         'assignment_name': assignment.title,
-                        'comment': f'Хорошая работа по теме "{topic}"',
+                        'comment': comment,
                     }
                 )
+                assignment_idx += 1
             
-            # Создаем дополнительные оценки без заданий (для разнообразия)
-            additional_grades = [
-                {'course': courses[0], 'topic': 'Основы Python', 'value': 88, 'days_ago': 35},
-                {'course': courses[0], 'topic': 'Переменные', 'value': 85, 'days_ago': 30},
-                {'course': courses[1], 'topic': 'SQL основы', 'value': 72, 'days_ago': 28},
-                {'course': courses[1], 'topic': 'SELECT', 'value': 68, 'days_ago': 25},
-                {'course': courses[2], 'topic': 'HTML', 'value': 95, 'days_ago': 32},
-                {'course': courses[2], 'topic': 'CSS', 'value': 92, 'days_ago': 28},
-            ]
+            # Создаем дополнительные оценки без заданий (промежуточные тесты, активности)
+            additional_topics = {
+                courses[0].id: ['Основы Python', 'Переменные', 'Циклы', 'Функции', 'ООП', 'Модули', 'Обработка исключений'],
+                courses[1].id: ['SQL основы', 'SELECT', 'JOIN', 'Нормализация', 'Индексы', 'Транзакции', 'Оптимизация'],
+                courses[2].id: ['HTML', 'CSS', 'JavaScript', 'DOM', 'AJAX', 'JSON', 'Асинхронность'],
+            }
             
-            for grade_data in additional_grades:
-                grade_date = timezone.now() - timedelta(days=grade_data['days_ago'])
-                Grade.objects.get_or_create(
-                    student=user,
-                    course=grade_data['course'],
-                    topic=grade_data['topic'],
-                    assignment_name=f'Тест по теме "{grade_data["topic"]}"',
-                    defaults={
-                        'value': grade_data['value'],
-                        'date': grade_date,
-                        'comment': 'Промежуточная оценка',
-                    }
-                )
+            additional_grades_data = {
+                courses[0].id: [88, 85, 90, 87, 92, 89, 91],  # Python - хорошие оценки
+                courses[1].id: [72, 68, 70, 75, 73, 78, 80],  # БД - средние, улучшаются
+                courses[2].id: [95, 92, 97, 94, 96, 93, 98],  # Веб - отличные
+            }
             
-            # Создаем посещаемость (хорошая посещаемость для демонстрации)
+            for course in courses:
+                topics = additional_topics.get(course.id, [])
+                grades = additional_grades_data.get(course.id, [75] * len(topics))
+                
+                for i, (topic, grade_val) in enumerate(zip(topics, grades)):
+                    days_ago = 70 - i * 5  # Распределяем за последние 70 дней
+                    grade_date = timezone.now() - timedelta(days=days_ago)
+                    
+                    # Добавляем вариацию
+                    final_grade = grade_val + random.randint(-2, 2)
+                    final_grade = max(50, min(100, final_grade))
+                    
+                    Grade.objects.get_or_create(
+                        student=user,
+                        course=course,
+                        topic=topic,
+                        assignment_name=f'Промежуточный тест: {topic}',
+                        defaults={
+                            'value': final_grade,
+                            'date': grade_date,
+                            'comment': f'Проверка знаний по теме "{topic}"',
+                        }
+                    )
+            
+            # Создаем посещаемость (реалистичная для демонстрации ИИ)
             from .models import Attendance
             enrollments = Enrollment.objects.filter(student=student)
             
-            # Создаем посещаемость за последние 2 месяца
+            # Разная посещаемость для разных курсов
+            attendance_rates = {
+                courses[0].id: 0.92,  # Python - отличная посещаемость
+                courses[1].id: 0.78,  # БД - средняя посещаемость
+                courses[2].id: 0.95,  # Веб - почти идеальная
+            }
+            
+            # Создаем посещаемость за последние 3 месяца (12 недель)
             for enrollment in enrollments:
                 course = enrollment.course
                 course_lectures = Lecture.objects.filter(course=course)
                 
-                # Если лекций еще нет, создадим несколько для посещаемости
+                # Если лекций еще нет, создадим больше для посещаемости
                 if not course_lectures.exists():
-                    for i in range(5):
+                    for i in range(15):  # 15 лекций на курс
                         Lecture.objects.get_or_create(
                             course=course,
                             title=f'Лекция {i+1} - {course.name}',
                             defaults={
-                                'content_text': f'Содержание лекции {i+1} по курсу {course.name}',
+                                'content_text': f'Подробное содержание лекции {i+1} по курсу {course.name}. Здесь рассматриваются основные концепции и практические примеры.',
                             }
                         )
                     course_lectures = Lecture.objects.filter(course=course)
                 
-                # Создаем посещаемость (80-90% посещаемость)
-                for lecture in course_lectures[:10]:  # Берем первые 10 лекций
-                    for week in range(8):  # 8 недель назад
-                        attendance_date = timezone.now().date() - timedelta(days=week * 7 + random.randint(0, 6))
-                        present = random.random() > 0.15  # 85% посещаемость
-                        
-                        Attendance.objects.get_or_create(
-                            enrollment=enrollment,
-                            lecture=lecture,
-                            date=attendance_date,
-                            defaults={'present': present}
-                        )
+                attendance_rate = attendance_rates.get(course.id, 0.85)
+                
+                # Создаем посещаемость за 12 недель
+                for lecture in course_lectures[:15]:  # Берем 15 лекций
+                    for week in range(12):  # 12 недель назад
+                        # Лекции обычно 2 раза в неделю
+                        for day_in_week in [0, 3]:  # Понедельник и четверг
+                            attendance_date = timezone.now().date() - timedelta(
+                                days=week * 7 + day_in_week + random.randint(0, 1)
+                            )
+                            
+                            # Проверяем, не слишком ли старая дата
+                            if attendance_date > (timezone.now().date() - timedelta(days=90)):
+                                present = random.random() > (1 - attendance_rate)
+                                
+                                Attendance.objects.get_or_create(
+                                    enrollment=enrollment,
+                                    lecture=lecture,
+                                    date=attendance_date,
+                                    defaults={'present': present}
+                                )
             
-            # Создаем выполнения заданий (submissions)
-            for assignment, course in assignments_data[:12]:  # Первые 12 заданий
-                submission, created = Submission.objects.get_or_create(
-                    assignment=assignment,
-                    student=user,
-                    defaults={
-                        'text': f'Выполнение задания: {assignment.title}',
-                        'submitted_at': assignment.due_date - timedelta(days=random.randint(0, 2)),
-                        'score': Grade.objects.filter(student=user, assignment=assignment).first().value if Grade.objects.filter(student=user, assignment=assignment).exists() else None,
-                    }
-                )
+            # Создаем выполнения заданий (submissions) - большинство заданий выполнено
+            for assignment, course in assignments_data:
+                # 90% заданий выполнено (реалистично)
+                if random.random() < 0.90:
+                    # Дата сдачи (от 0 до 3 дней до дедлайна - студент сдает вовремя)
+                    days_before = random.randint(0, 3)
+                    submitted_at = assignment.due_date - timedelta(days=days_before)
+                    
+                    # Получаем оценку, если есть
+                    grade = Grade.objects.filter(student=user, assignment=assignment).first()
+                    score = grade.value if grade else None
+                    
+                    # Текст выполнения зависит от типа задания
+                    if assignment.assignment_type == 'homework':
+                        text = f'Решение домашнего задания по теме "{assignment.topic}". Выполнены все требования.'
+                    elif assignment.assignment_type == 'quiz':
+                        text = f'Ответы на контрольную работу по теме "{assignment.topic}".'
+                    elif assignment.assignment_type == 'lab':
+                        text = f'Отчет по лабораторной работе "{assignment.topic}". Включены код, результаты и выводы.'
+                    elif assignment.assignment_type == 'project':
+                        text = f'Проект по курсу {course.name}. Включает документацию, код и презентацию.'
+                    else:
+                        text = f'Выполнение задания: {assignment.title}'
+                    
+                    Submission.objects.get_or_create(
+                        assignment=assignment,
+                        student=user,
+                        defaults={
+                            'text': text,
+                            'submitted_at': submitted_at,
+                            'score': score,
+                        }
+                    )
             
             # Создаем тестовые лекции с контентом
             lectures_data = [

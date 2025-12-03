@@ -11,6 +11,7 @@ urlpatterns = [
     path('profile/', views.profile_view, name='profile'),
     path('schedule/', views.schedule_view, name='schedule'),
     path('grades/', views.grades_view, name='grades'),
+    path('ai-assistant/', views.ai_assistant, name='ai_assistant'),
 
     path('course/<int:pk>/', views.course_detail, name='course_detail'),
 

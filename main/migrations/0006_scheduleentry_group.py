@@ -1,6 +1,6 @@
 from django.db import migrations, models
 import django.db.models.deletion
-from django.db.migrations.operations import RunSQL
+from django.db.migrations.operations import RunSQL, SeparateDatabaseAndState
 
 
 class Migration(migrations.Migration):
@@ -29,17 +29,25 @@ class Migration(migrations.Migration):
             reverse_sql="-- Reverse migration not needed",
         ),
         # Добавляем поле в состояние Django (для совместимости)
-        migrations.AddField(
-            model_name="scheduleentry",
-            name="group",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name="schedule_entries",
-                to="main.group",
-                verbose_name="Учебная группа",
-            ),
+        # Используем SeparateDatabaseAndState чтобы не выполнять SQL операцию
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                # В базе данных уже все сделано через RunSQL выше
+            ],
+            state_operations=[
+                migrations.AddField(
+                    model_name="scheduleentry",
+                    name="group",
+                    field=models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="schedule_entries",
+                        to="main.group",
+                        verbose_name="Учебная группа",
+                    ),
+                ),
+            ],
         ),
     ]
 

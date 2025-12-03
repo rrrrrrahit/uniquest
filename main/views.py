@@ -1037,68 +1037,100 @@ def ai_assistant(request):
 @student_required
 def ai_learning_assistant(request):
     """Революционный ИИ-ассистент для персонализированного обучения"""
-    from .ai_learning_service import (
-        analyze_learning_style, get_ai_recommendations,
-        predict_exam_success, create_personalized_study_plan
-    )
-    from .models import ExamPrediction, PersonalizedStudyPlan
-    
-    user = request.user
-    profile = getattr(user, 'profile', None)
-    
-    # Получаем курсы студента
-    student_obj = None
-    student_courses = []
-    if profile:
-        try:
-            student_obj = Student.objects.get(user=user)
-            enrollments = Enrollment.objects.filter(student=student_obj).select_related('course')
-            student_courses = [e.course for e in enrollments if e.course]
-        except Student.DoesNotExist:
-            pass
-    
-    # Анализируем стиль обучения
-    learning_profile = None
     try:
-        learning_profile = analyze_learning_style(user)
+        from .ai_learning_service import (
+            analyze_learning_style, get_ai_recommendations,
+            predict_exam_success, create_personalized_study_plan
+        )
+        from .models import ExamPrediction, PersonalizedStudyPlan, SmartLearningProfile
+        
+        user = request.user
+        profile = getattr(user, 'profile', None)
+        
+        # Получаем курсы студента
+        student_obj = None
+        student_courses = []
+        if profile:
+            try:
+                student_obj = Student.objects.get(user=user)
+                enrollments = Enrollment.objects.filter(student=student_obj).select_related('course')
+                student_courses = [e.course for e in enrollments if e.course]
+            except Student.DoesNotExist:
+                pass
+            except Exception:
+                pass
+        
+        # Анализируем стиль обучения
+        learning_profile = None
+        try:
+            learning_profile = analyze_learning_style(user)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Error analyzing learning style: {str(e)}', exc_info=True)
+            # Создаем базовый профиль в случае ошибки
+            try:
+                learning_profile, _ = SmartLearningProfile.objects.get_or_create(
+                    student=user,
+                    defaults={'learning_style': 'mixed'}
+                )
+            except Exception:
+                pass
+        
+        # Получаем рекомендации для всех курсов
+        all_recommendations = {}
+        exam_predictions = {}
+        study_plans = {}
+        
+        for course in student_courses:
+            try:
+                recommendations = get_ai_recommendations(user, course)
+                all_recommendations[course.id] = recommendations
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f'Error getting recommendations for course {course.id}: {str(e)}', exc_info=True)
+                all_recommendations[course.id] = []
+            
+            try:
+                # Получаем последнее предсказание
+                prediction = ExamPrediction.objects.filter(
+                    student=user, course=course
+                ).order_by('-created_at').first()
+                if prediction:
+                    exam_predictions[course.id] = prediction
+            except Exception:
+                pass
+            
+            try:
+                # Получаем активный план
+                plan = PersonalizedStudyPlan.objects.filter(
+                    student=user, course=course, is_active=True
+                ).order_by('-created_at').first()
+                if plan:
+                    study_plans[course.id] = plan
+            except Exception:
+                pass
+        
+        return render(request, 'main/ai_learning_assistant.html', {
+            'learning_profile': learning_profile,
+            'student_courses': student_courses,
+            'recommendations': all_recommendations,
+            'exam_predictions': exam_predictions,
+            'study_plans': study_plans,
+        })
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f'Error analyzing learning style: {str(e)}')
-    
-    # Получаем рекомендации для всех курсов
-    all_recommendations = {}
-    exam_predictions = {}
-    study_plans = {}
-    
-    for course in student_courses:
-        try:
-            recommendations = get_ai_recommendations(user, course)
-            all_recommendations[course.id] = recommendations
-            
-            # Получаем последнее предсказание
-            prediction = ExamPrediction.objects.filter(
-                student=user, course=course
-            ).order_by('-created_at').first()
-            if prediction:
-                exam_predictions[course.id] = prediction
-            
-            # Получаем активный план
-            plan = PersonalizedStudyPlan.objects.filter(
-                student=user, course=course, is_active=True
-            ).order_by('-created_at').first()
-            if plan:
-                study_plans[course.id] = plan
-        except Exception:
-            pass
-    
-    return render(request, 'main/ai_learning_assistant.html', {
-        'learning_profile': learning_profile,
-        'student_courses': student_courses,
-        'recommendations': all_recommendations,
-        'exam_predictions': exam_predictions,
-        'study_plans': study_plans,
-    })
+        logger.error(f'AI Learning Assistant error: {str(e)}', exc_info=True)
+        messages.error(request, f'Произошла ошибка при загрузке умного ассистента. Попробуйте позже.')
+        return render(request, 'main/ai_learning_assistant.html', {
+            'learning_profile': None,
+            'student_courses': [],
+            'recommendations': {},
+            'exam_predictions': {},
+            'study_plans': {},
+        })
 
 
 @login_required

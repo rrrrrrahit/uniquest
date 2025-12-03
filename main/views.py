@@ -299,6 +299,13 @@ def grades_view(request):
 
 # ===== Публичные академические страницы =====
 
+def groups_list(request):
+    """Список всех групп"""
+    groups = Group.objects.all().order_by('-year', 'name')
+    # Добавляем количество студентов в каждой группе
+    for group in groups:
+        group.student_count = Profile.objects.filter(group=group, role=Profile.ROLE_STUDENT).count()
+    return render(request, 'main/groups_list.html', {'groups': groups})
 
 def group_schedule(request, group_id: int):
     group = get_object_or_404(Group, id=group_id)

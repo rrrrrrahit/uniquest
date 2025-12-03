@@ -21,6 +21,7 @@ urlpatterns = [
     path('teacher/ai-analysis/<int:student_id>/<int:course_id>/', views.ai_analysis_view, name='ai_analysis'),
 
     # Публичные академические страницы
+    path('groups/', views.groups_list, name='groups_list'),
     path('groups/<int:group_id>/schedule/', views.group_schedule, name='group_schedule'),
     path('students/<int:pk>/profile/', views.student_public_profile, name='student_public_profile'),
     path('courses/<int:pk>/lectures/', views.course_lectures, name='course_lectures'),

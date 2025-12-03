@@ -269,7 +269,6 @@ class Command(BaseCommand):
                 start_str, end_str = random.choice(time_slots)
                 entry, made = ScheduleEntry.objects.get_or_create(
                     course=course,
-                    group=group,
                     weekday=weekday,
                     start_time=start_str,
                     end_time=end_str,
@@ -277,7 +276,8 @@ class Command(BaseCommand):
                 )
                 if made:
                     if group:
-                        related_profiles = Profile.objects.filter(group=group.name)
+                        # Получаем профили студентов этой группы
+                        related_profiles = Profile.objects.filter(group=group, role=Profile.ROLE_STUDENT)
                         if related_profiles.exists():
                             entry.groups.add(*related_profiles[:10])
                     created += 1

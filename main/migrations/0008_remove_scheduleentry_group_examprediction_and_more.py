@@ -14,10 +14,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='scheduleentry',
-            name='group',
-        ),
+        # Поле group уже было удалено в миграции 0007, поэтому пропускаем его удаление
         migrations.CreateModel(
             name='ExamPrediction',
             fields=[

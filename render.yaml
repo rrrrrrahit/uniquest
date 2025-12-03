@@ -4,7 +4,7 @@ services:
     name: uniquest-web
     env: python
     plan: free  # Бесплатный план
-    region: frankfurt  # Ближайший к Казахстану регион
+    # region: frankfurt  # Регион будет использован из существующего сервиса или по умолчанию
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
     startCommand: python manage.py migrate --noinput && gunicorn uniquest.wsgi:application
     healthCheckPath: /

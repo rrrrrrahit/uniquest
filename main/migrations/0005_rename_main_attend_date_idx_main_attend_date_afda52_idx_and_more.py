@@ -3,6 +3,7 @@
 import django.db.models.deletion
 import main.models
 from django.db import migrations, models
+from django.db.migrations.operations import RunSQL
 
 
 class Migration(migrations.Migration):
@@ -39,7 +40,14 @@ class Migration(migrations.Migration):
                 verbose_name='Учебная группа'
             ),
         ),
-        migrations.AlterField(
+        # Сначала удаляем старое поле vector_embedding (если оно было типа double precision[])
+        migrations.RunSQL(
+            # Удаляем старое поле, если оно существует
+            sql="ALTER TABLE main_lecture DROP COLUMN IF EXISTS vector_embedding;",
+            reverse_sql="-- Reverse migration not needed",
+        ),
+        # Затем добавляем новое поле как JSONField
+        migrations.AddField(
             model_name='lecture',
             name='vector_embedding',
             field=models.JSONField(

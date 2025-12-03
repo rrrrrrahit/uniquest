@@ -1,0 +1,31 @@
+{% extends 'main/base.html' %}
+{% block title %}Ошибка создания студента{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="card shadow-sm border-danger">
+      <div class="card-body p-5">
+        <div class="text-center mb-4">
+          <i class="fas fa-exclamation-triangle fa-4x text-danger mb-3"></i>
+          <h2 class="text-danger">Ошибка при создании</h2>
+        </div>
+        
+        <div class="alert alert-danger">
+          <strong>Ошибка:</strong> {{ error }}
+        </div>
+        
+        <div class="d-grid gap-2">
+          <a href="{% url 'create_test_student' %}" class="btn btn-primary">
+            <i class="fas fa-redo me-2"></i>Попробовать снова
+          </a>
+          <a href="{% url 'index' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-home me-2"></i>На главную
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

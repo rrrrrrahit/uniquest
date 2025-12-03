@@ -1,0 +1,46 @@
+{% extends 'main/base.html' %}
+{% block title %}Создать тестового студента{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body p-5">
+        <div class="text-center mb-4">
+          <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
+          <h2>Создать тестового студента</h2>
+          <p class="text-muted">Эта страница создаст тестового студента с данными для демонстрации</p>
+        </div>
+        
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle me-2"></i>
+          <strong>Что будет создано:</strong>
+          <ul class="mb-0 mt-2">
+            <li>Пользователь: <code>test_student</code></li>
+            <li>Пароль: <code>test123456</code></li>
+            <li>Группа: CS-101</li>
+            <li>3 курса с расписанием</li>
+            <li>Записи на курсы</li>
+          </ul>
+        </div>
+        
+        <form method="post">
+          {% csrf_token %}
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary btn-lg">
+              <i class="fas fa-magic me-2"></i>Создать тестового студента
+            </button>
+          </div>
+        </form>
+        
+        <div class="mt-4 text-center">
+          <a href="{% url 'index' %}" class="text-muted">
+            <i class="fas fa-arrow-left me-1"></i>Вернуться на главную
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

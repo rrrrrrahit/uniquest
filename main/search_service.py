@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Q
 
 from .models import Lecture
 
@@ -46,14 +46,39 @@ def semantic_search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
     Использует (в порядке приоритета):
       1) FAISS-индекс
       2) vector_embedding в БД
-      3) BM25 (rank-bm25) по тексту.
+      3) BM25 (rank-bm25) по тексту
+      4) Простой текстовый поиск (fallback)
     """
     query = (query or "").strip()
     if not query:
         return []
+    
+    # Простой текстовый поиск как основной fallback (работает всегда)
+    try:
+        # Ищем по заголовку и содержимому
+        lectures = Lecture.objects.filter(
+            Q(title__icontains=query) | 
+            Q(content_text__icontains=query)
+        )[:top_k]
+        
+        if lectures.exists():
+            results = []
+            for lec in lectures:
+                # Простой подсчет релевантности по количеству вхождений
+                title_matches = lec.title.lower().count(query.lower())
+                content_matches = lec.content_text.lower().count(query.lower()) if lec.content_text else 0
+                score = (title_matches * 2 + content_matches) / max(len(lec.content_text or ""), 1) * 100
+                
+                results.append(_lecture_to_result(lec, min(score, 100.0)))
+            
+            # Сортируем по релевантности
+            results.sort(key=lambda x: x['score'], reverse=True)
+            return results[:top_k]
+    except Exception:
+        pass
 
     info = _load_embeddings_backend()
-    backend = info.get("backend", "bm25")
+    backend = info.get("backend", "simple")
 
     if backend == "faiss" and FAISS_INDEX_PATH.exists() and FAISS_MAPPING_PATH.exists():
         try:

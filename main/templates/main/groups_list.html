@@ -2,15 +2,15 @@
 {% block title %}Список групп{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
+<div class="row mb-4 reveal">
   <div class="col-12">
     <h1 class="mb-1">Учебные группы</h1>
-    <p class="text-muted">Просмотр расписания по группам</p>
+    <p class="text-muted">Краткий реестр групп с контингентом и учебной нагрузкой</p>
   </div>
 </div>
 
 {% if groups %}
-  <div class="row g-4">
+  <div class="row g-4 reveal">
     {% for group in groups %}
       <div class="col-md-4">
         <div class="card h-100">
@@ -24,6 +24,9 @@
             <p class="text-muted mb-3">
               <i class="fas fa-user-graduate me-1"></i>Студентов: {{ group.student_count }}
             </p>
+            <p class="text-muted mb-3">
+              <i class="fas fa-book me-1"></i>Активных дисциплин: {{ group.courses_count }}
+            </p>
             <a href="{% url 'group_schedule' group.id %}" class="btn btn-primary">
               <i class="fas fa-calendar-alt me-2"></i>Посмотреть расписание
             </a>
@@ -33,7 +36,7 @@
     {% endfor %}
   </div>
 {% else %}
-  <div class="alert alert-info text-center">
+  <div class="alert alert-info text-center reveal">
     <i class="fas fa-info-circle fa-2x mb-3"></i>
     <h5>Группы не найдены</h5>
     <p>В системе пока нет учебных групп.</p>

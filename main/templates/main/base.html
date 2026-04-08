@@ -21,7 +21,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark site-navbar">
+  <nav class="navbar navbar-expand-lg navbar-dark site-navbar sticky-top">
     <div class="container">
       <a class="navbar-brand" href="{% url 'index' %}">
         <i class="fas fa-graduation-cap me-2"></i>UniQuest
@@ -68,6 +68,11 @@
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'grades' %}">
                   <i class="fas fa-chart-line me-1"></i>Оценки
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'student_passport' %}">
+                  <i class="fas fa-id-card me-1"></i>Паспорт
                 </a>
               </li>
               <li class="nav-item">
@@ -135,22 +140,27 @@
   <footer class="site-footer py-4">
     <div class="container text-center">
       <div class="row align-items-center">
-        <div class="col-md-6 text-md-start">
-          <small>© {% now "Y" %} UniQuest — образовательная платформа Казахстана. Все права защищены.</small>
+        <div class="col-md-8 text-md-start">
+          <small>© {% now "Y" %} UniQuest — академическая образовательная платформа. Для учебных и исследовательских целей.</small>
         </div>
-        <div class="col-md-6 text-md-end">
-          <div class="social-links">
-            <a href="#" class="text-light me-3"><i class="fab fa-facebook"></i></a>
-            <a href="#" class="text-light me-3"><i class="fab fa-twitter"></i></a>
-            <a href="#" class="text-light me-3"><i class="fab fa-instagram"></i></a>
-            <a href="#" class="text-light"><i class="fab fa-linkedin"></i></a>
-          </div>
+        <div class="col-md-4 text-md-end">
+          <small class="text-light">ATU · Smart Academic Analytics</small>
         </div>
       </div>
     </div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("show");
+        }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll(".reveal").forEach((el) => revealObserver.observe(el));
+  </script>
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

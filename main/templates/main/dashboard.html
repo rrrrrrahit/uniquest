@@ -3,7 +3,7 @@
 {% block title %}Главная панель — UniQuest{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
+<div class="row mb-4 reveal">
   <div class="col-12">
     <h1 class="mb-1">Добро пожаловать, {{ user.get_full_name|default:user.username }}!</h1>
     {% if is_admin_dashboard %}
@@ -16,28 +16,49 @@
 
 {% if is_admin_dashboard %}
   <!-- Админский дашборд -->
-  <div class="row mb-4">
-    <div class="col-md-4 mb-3">
+  <div class="row mb-4 reveal">
+    <div class="col-md-3 mb-3">
       <div class="dashboard-card text-center">
         <h3 class="mb-0">{{ total_students }}</h3>
         <p class="text-muted mb-0">Студентов</p>
       </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
       <div class="dashboard-card text-center">
         <h3 class="mb-0">{{ active_groups }}</h3>
         <p class="text-muted mb-0">Активных групп</p>
       </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
       <div class="dashboard-card text-center">
         <h3 class="mb-0">{{ total_courses }}</h3>
         <p class="text-muted mb-0">Курсов</p>
       </div>
     </div>
+    <div class="col-md-3 mb-3">
+      <div class="dashboard-card text-center">
+        <h3 class="mb-0">{{ total_grades }}</h3>
+        <p class="text-muted mb-0">Оценок в системе</p>
+      </div>
+    </div>
   </div>
 
-  <div class="row mb-4">
+  <div class="row mb-4 reveal">
+    <div class="col-md-6 mb-3">
+      <div class="dashboard-card text-center">
+        <h3 class="mb-0">{{ avg_grade_system|floatformat:1 }}</h3>
+        <p class="text-muted mb-0">KPI: средний академический балл</p>
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <div class="dashboard-card text-center">
+        <h3 class="mb-0">{{ attendance_system|floatformat:1 }}%</h3>
+        <p class="text-muted mb-0">KPI: средняя посещаемость (САПАР)</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4 reveal">
     <div class="col-md-6 mb-3">
       <div class="card">
         <div class="card-header">
@@ -73,6 +94,82 @@
             </div>
             <small class="text-muted">Поиск по лекциям использует семантический поиск (ML-модель).</small>
           </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4 reveal">
+    <div class="col-md-6 mb-3">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Риск-группы (деканат/кафедра)</h5>
+        </div>
+        <div class="card-body">
+          {% if risk_groups %}
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead>
+                  <tr>
+                    <th>Группа</th>
+                    <th>Студентов</th>
+                    <th>В риске</th>
+                    <th>% риска</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for rg in risk_groups %}
+                  <tr>
+                    <td>{{ rg.group.name }}</td>
+                    <td>{{ rg.students }}</td>
+                    <td>{{ rg.risk_count }}</td>
+                    <td><span class="badge {% if rg.risk_percent >= 40 %}bg-danger{% elif rg.risk_percent >= 20 %}bg-warning{% else %}bg-success{% endif %}">{{ rg.risk_percent|floatformat:1 }}%</span></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">Риск-группы не выявлены.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 mb-3">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Студенты высокого риска</h5>
+        </div>
+        <div class="card-body">
+          {% if risk_students %}
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead>
+                  <tr>
+                    <th>Студент</th>
+                    <th>Балл</th>
+                    <th>Посещаемость</th>
+                    <th>Триггеры</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for rs in risk_students %}
+                  <tr>
+                    <td>{{ rs.student.last_name }} {{ rs.student.first_name }}</td>
+                    <td>{{ rs.avg_grade|floatformat:1 }}</td>
+                    <td>{{ rs.attendance_rate|floatformat:1 }}%</td>
+                    <td>
+                      {% for t in rs.triggers %}<span class="badge bg-danger me-1">{{ t }}</span>{% endfor %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">Критичных рисков не обнаружено.</p>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -118,7 +215,7 @@
 
 <!-- Студенческий дашборд -->
 <!-- Статистика -->
-<div class="row mb-4">
+<div class="row mb-4 reveal">
   <div class="col-md-3 mb-3">
     <div class="dashboard-card text-center">
       <div class="mb-2">
@@ -157,7 +254,7 @@
   </div>
 </div>
 
-<div class="row">
+<div class="row reveal">
   <!-- Профиль и быстрые действия -->
   <div class="col-md-4 mb-4">
     <div class="card">
@@ -188,6 +285,9 @@
           </a>
           <a href="{% url 'profile' %}" class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-user me-2"></i>Профиль
+          </a>
+          <a href="{% url 'student_passport' %}" class="btn btn-outline-dark btn-sm">
+            <i class="fas fa-id-card me-2"></i>Паспорт студента
           </a>
         </div>
       </div>
@@ -250,7 +350,7 @@
 
 <!-- Ближайшие задания -->
 {% if upcoming_assignments %}
-<div class="row mb-4">
+<div class="row mb-4 reveal">
   <div class="col-12">
     <div class="card">
       <div class="card-header">
@@ -283,7 +383,7 @@
 {% endif %}
 
 <!-- Мои курсы -->
-<div class="row">
+<div class="row reveal">
   <div class="col-12">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">

@@ -1,326 +1,207 @@
 {% extends 'main/base.html' %}
 {% load static %}
-{% block title %}Главная — UniQuest{% endblock %}
+{% block title %}UniQuest — академическая образовательная платформа{% endblock %}
 
 {% block hero %}
-  <div class="hero-card p-5 rounded fade-in-up">
-    <div class="row align-items-center">
-      <div class="col-lg-6">
-        <h1 class="display-4 mb-4 indie-accent">
-          Учись.<br>
-          Исследуй.<br>
-          Достигай.
-        </h1>
-        <p class="lead mb-4">
-          Расширяй свои знания с UniQuest — твоим надежным образовательным спутником. 
-          Открывай новые горизонты в обучении с нашей инновационной платформой, созданной для студентов и преподавателей.
-        </p>
+<div class="py-2">
+  <div class="row align-items-center g-4">
+    <div class="col-lg-7">
+      <span class="badge bg-light text-dark mb-3">ATU · Academic Digital Campus</span>
+      <h1 class="display-5 mb-3">Понятная образовательная платформа без лишнего</h1>
+      <p class="lead mb-4">Учебные данные, группы, предметы и аналитика в структурированном виде. Быстро находите главное и принимайте решения по учебному процессу.</p>
+      <div class="d-flex flex-wrap gap-2">
         {% if not user.is_authenticated %}
-          <div class="d-flex flex-wrap gap-3">
-            <a href="{% url 'register' %}" class="btn btn-primary btn-lg">
-              <i class="fas fa-rocket me-2"></i>Начать
-            </a>
-            <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg">
-              <i class="fas fa-sign-in-alt me-2"></i>Войти
-            </a>
-          </div>
-          <div class="mt-3 d-flex flex-wrap gap-2">
-            <a href="{% url 'create_test_student' %}" class="btn btn-outline-info btn-sm">
-              <i class="fas fa-user-graduate me-1"></i>Тестовый студент
-            </a>
-            <a href="{% url 'create_test_teacher' %}" class="btn btn-outline-warning btn-sm">
-              <i class="fas fa-user-tie me-1"></i>Тестовый учитель
-            </a>
-          </div>
+          <a href="{% url 'register' %}" class="btn btn-primary btn-lg"><i class="fas fa-user-plus me-2"></i>Регистрация</a>
+          <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg"><i class="fas fa-right-to-bracket me-2"></i>Вход</a>
         {% else %}
-          <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg">
-            <i class="fas fa-tachometer-alt me-2"></i>Перейти в панель управления
-          </a>
+          <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg"><i class="fas fa-table-columns me-2"></i>Панель</a>
+          <a href="{% url 'groups_list' %}" class="btn btn-outline-light btn-lg"><i class="fas fa-users me-2"></i>Группы</a>
         {% endif %}
       </div>
-      <div class="col-lg-6 text-center">
-        <div class="indie-illustration">
-          <div class="desk-scene">
-            <div class="desk-lamp"></div>
-            <div class="books-stack"></div>
-            <div class="notebook"></div>
-            <div class="coffee-mug"></div>
-            <div class="pencil"></div>
-            <div class="sparkle"></div>
+    </div>
+    <div class="col-lg-5">
+      <div class="hero-media card border-0">
+        <img src="https://images.unsplash.com/photo-1452860606245-08befc0ff44b?auto=format&fit=crop&w=1200&q=80" class="img-fluid rounded" alt="University lecture hall">
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="mb-4 reveal">
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3 col-6">
+          <div class="kpi-box">
+            <div class="kpi-title">Студентов</div>
+            <div class="kpi-value counter" data-target="{{ total_students }}">0</div>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="kpi-box">
+            <div class="kpi-title">Групп</div>
+            <div class="kpi-value counter" data-target="{{ total_groups }}">0</div>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="kpi-box">
+            <div class="kpi-title">Предметов</div>
+            <div class="kpi-value counter" data-target="{{ total_subjects }}">0</div>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="kpi-box">
+            <div class="kpi-title">Курсов</div>
+            <div class="kpi-value counter" data-target="{{ total_courses }}">0</div>
           </div>
         </div>
       </div>
     </div>
   </div>
+</section>
+
+<section class="mb-5 reveal">
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-header"><h5 class="mb-0">Как устроена платформа</h5></div>
+        <div class="card-body">
+          <ol class="mb-0 ps-3">
+            <li class="mb-2">Учебный контур: группы, расписание, дисциплины, оценки.</li>
+            <li class="mb-2">Контур аналитики: KPI, риски, траектория студента.</li>
+            <li>Контур ИИ: рекомендации и прогнозы по успеваемости.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-8">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Академические данные</h5>
+          <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-primary js-tab-btn active" data-tab="groups-tab" type="button">Группы</button>
+            <button class="btn btn-outline-primary js-tab-btn" data-tab="subjects-tab" type="button">Предметы</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="groups-tab" class="js-tab-panel">
+            <div class="table-responsive">
+              <table class="table mb-0">
+                <thead>
+                  <tr><th>Группа</th><th>Год набора</th><th>Студентов</th></tr>
+                </thead>
+                <tbody>
+                  {% for g in top_groups %}
+                  <tr>
+                    <td><a href="{% url 'group_schedule' g.id %}">{{ g.name }}</a></td>
+                    <td>{{ g.year }}</td>
+                    <td>{{ g.student_count }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="3" class="text-muted">Пока нет данных по группам.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div id="subjects-tab" class="js-tab-panel d-none">
+            <div class="row g-2">
+              {% for s in top_subjects %}
+              <div class="col-md-6">
+                <div class="subject-chip">
+                  <div>
+                    <div class="fw-semibold">{{ s.code }}</div>
+                    <small class="text-muted">{{ s.name_ru|truncatechars:45 }}</small>
+                  </div>
+                  <span class="badge bg-primary">{{ s.course_count }}</span>
+                </div>
+              </div>
+              {% empty %}
+              <p class="text-muted mb-0">Пока нет данных по предметам.</p>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mb-5 reveal">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Рекомендуемые дисциплины</h2>
+    <small class="text-muted">Краткая витрина курсов</small>
+  </div>
+  <div class="row g-4">
+    {% for course in courses %}
+    <div class="col-md-4">
+      <div class="card h-100">
+        <img src="https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?auto=format&fit=crop&w=900&q=80" class="card-img-top" alt="Course image">
+        <div class="card-body">
+          <h5 class="card-title">{{ course.name }}</h5>
+          <p class="card-text">{{ course.description|truncatechars:120 }}</p>
+          {% if course.code %}<small class="text-muted d-block mb-2">Код: {{ course.code }}</small>{% endif %}
+          <a href="{% url 'course_detail' course.pk %}" class="btn btn-outline-primary btn-sm">Подробнее</a>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+      <div class="alert alert-info mb-0">Курсы пока не добавлены.</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if not user.is_authenticated %}
+<section class="text-center">
+  <div class="card">
+    <div class="card-body py-5">
+      <h3 class="mb-3">Демо-доступ для презентации</h3>
+      <div class="d-flex flex-wrap gap-2 justify-content-center">
+        <a href="{% url 'create_test_student' %}" class="btn btn-outline-info"><i class="fas fa-user-graduate me-1"></i>Тестовый студент</a>
+        <a href="{% url 'create_test_teacher' %}" class="btn btn-outline-warning"><i class="fas fa-user-tie me-1"></i>Тестовый преподаватель</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
 {% endblock %}
 
-{% block content %}
-  <!-- Why UniQuest Section -->
-  <section class="py-5 section-bg">
-    <div class="text-center mb-5">
-      <h2 class="indie-accent sparkle">Why UniQuest?</h2>
-      <div class="decorative-line mx-auto"></div>
-    </div>
-    
-    <div class="row g-4">
-      <div class="col-md-4">
-        <div class="card h-100 pixel-decoration vintage-paper">
-          <div class="card-body text-center p-4">
-            <div class="feature-icon mb-3 pixel-icon">
-              <i class="fas fa-chalkboard-teacher fa-3x text-primary"></i>
-            </div>
-            <h5 class="card-title">Опытные преподаватели</h5>
-            <p class="card-text">Учитесь у экспертов отрасли и увлеченных педагогов, которые привносят реальный опыт в аудиторию.</p>
-          </div>
-        </div>
-      </div>
-      
-      <div class="col-md-4">
-        <div class="card h-100 pixel-decoration vintage-paper">
-          <div class="card-body text-center p-4">
-            <div class="feature-icon mb-3 pixel-icon">
-              <i class="fas fa-books fa-3x text-primary"></i>
-            </div>
-            <h5 class="card-title">Разнообразные курсы</h5>
-            <p class="card-text">Изучайте широкий спектр предметов и дисциплин, адаптированных под ваши академические и профессиональные цели.</p>
-          </div>
-        </div>
-      </div>
-      
-      <div class="col-md-4">
-        <div class="card h-100 pixel-decoration vintage-paper">
-          <div class="card-body text-center p-4">
-            <div class="feature-icon mb-3 pixel-icon">
-              <i class="fas fa-clock fa-3x text-primary"></i>
-            </div>
-            <h5 class="card-title">Гибкое обучение</h5>
-            <p class="card-text">Учитесь в своем темпе, в любое время и в любом месте. Сочетайте образование со своим образом жизни.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+{% block extra_scripts %}
+<script>
+  document.querySelectorAll(".counter").forEach((el) => {
+    const target = parseInt(el.dataset.target || "0", 10);
+    let value = 0;
+    const step = Math.max(1, Math.floor(target / 30));
+    const timer = setInterval(() => {
+      value += step;
+      if (value >= target) {
+        value = target;
+        clearInterval(timer);
+      }
+      el.textContent = value;
+    }, 25);
+  });
 
-  <!-- Featured Courses Section -->
-  <section class="py-5 bg-pattern">
-    <div class="row align-items-center mb-5">
-      <div class="col-md-6">
-        <h2 class="indie-accent">Рекомендуемые курсы</h2>
-        <div class="decorative-line"></div>
-      </div>
-      <div class="col-md-6 text-end">
-        <div class="mini-illustration sparkle">
-          <i class="fas fa-graduation-cap fa-2x text-primary"></i>
-        </div>
-      </div>
-    </div>
-    
-    <div class="row g-4">
-      {% for course in courses %}
-        <div class="col-md-4">
-          <div class="card course-card h-100 hand-drawn">
-            {% if course.image %}
-              <img src="{{ course.image.url }}" class="card-img-top" alt="{{ course.name }}">
-            {% else %}
-              <div class="card-img-top bg-primary d-flex align-items-center justify-content-center" style="height: 200px;">
-                <i class="fas fa-book fa-3x text-light"></i>
-              </div>
-            {% endif %}
-            <div class="card-body">
-              <h5 class="card-title">{{ course.name }}</h5>
-              <p class="card-text">{{ course.description|truncatechars:120 }}</p>
-              {% if course.code %}
-                <small class="text-muted">Код: {{ course.code }}</small>
-              {% endif %}
-              {% if course.subject %}
-                <br><small class="text-muted">{{ course.subject.code }}</small>
-              {% endif %}
-              <div class="mt-3">
-                <a href="{% url 'course_detail' course.pk %}" class="btn btn-outline-primary btn-sm">
-                  <i class="fas fa-eye me-1"></i>Подробнее
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      {% empty %}
-        <div class="col-12">
-          <div class="alert alert-info text-center">
-            <i class="fas fa-info-circle fa-2x mb-3"></i>
-            <h5>Курсы пока недоступны</h5>
-            <p>Скоро появятся новые интересные курсы!</p>
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-  </section>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) entry.target.classList.add("show");
+    });
+  }, { threshold: 0.12 });
 
-  <!-- Call to Action Section -->
-  {% if not user.is_authenticated %}
-  <section class="py-5 text-center wood-texture">
-    <div class="card pixel-decoration vintage-paper">
-      <div class="card-body p-5">
-        <h3 class="indie-accent sparkle">Готовы начать свой путь?</h3>
-        <p class="lead mb-4">Присоединяйтесь к тысячам студентов, которые уже учатся с UniQuest</p>
-        <div class="d-flex flex-wrap gap-3 justify-content-center">
-          <a href="{% url 'register' %}" class="btn btn-primary btn-lg">
-            <i class="fas fa-user-plus me-2 pixel-icon"></i>Создать аккаунт
-          </a>
-          <a href="{% url 'create_test_student' %}" class="btn btn-outline-info btn-lg">
-            <i class="fas fa-user-graduate me-2"></i>Тестовый студент
-          </a>
-          <a href="{% url 'create_test_teacher' %}" class="btn btn-outline-warning btn-lg">
-            <i class="fas fa-user-tie me-2"></i>Тестовый учитель
-          </a>
-        </div>
-      </div>
-    </div>
-  </section>
-  {% endif %}
-{% endblock %}
+  document.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
 
-{% block extra_head %}
-  <!-- Font Awesome for icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  
-  <!-- Custom Indie Illustration Styles -->
-  <style>
-    .indie-illustration {
-      position: relative;
-      height: 300px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .desk-scene {
-      position: relative;
-      width: 250px;
-      height: 200px;
-      background: linear-gradient(135deg, #8B4513 0%, #A0522D 100%);
-      border-radius: 10px;
-      box-shadow: 0 10px 30px rgba(139, 69, 19, 0.3);
-    }
-    
-    .desk-lamp {
-      position: absolute;
-      top: 20px;
-      right: 30px;
-      width: 40px;
-      height: 60px;
-      background: linear-gradient(135deg, #D2691E 0%, #CD853F 100%);
-      border-radius: 20px 20px 5px 5px;
-      box-shadow: 0 5px 15px rgba(210, 105, 30, 0.4);
-    }
-    
-    .desk-lamp::before {
-      content: '';
-      position: absolute;
-      top: -10px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 30px;
-      height: 20px;
-      background: #F5F1E8;
-      border-radius: 15px;
-      box-shadow: 0 0 20px rgba(245, 241, 232, 0.8);
-    }
-    
-    .books-stack {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      width: 60px;
-      height: 80px;
-      background: linear-gradient(135deg, #8B4513 0%, #A0522D 100%);
-      border-radius: 5px;
-      box-shadow: 0 5px 15px rgba(139, 69, 19, 0.3);
-    }
-    
-    .books-stack::before {
-      content: '';
-      position: absolute;
-      top: 10px;
-      left: -5px;
-      width: 60px;
-      height: 60px;
-      background: linear-gradient(135deg, #8FBC8F 0%, #6B8E6B 100%);
-      border-radius: 5px;
-      box-shadow: 0 5px 15px rgba(143, 188, 143, 0.3);
-    }
-    
-    .notebook {
-      position: absolute;
-      top: 50px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 80px;
-      height: 100px;
-      background: #F5F1E8;
-      border-radius: 5px;
-      box-shadow: 0 5px 15px rgba(245, 241, 232, 0.3);
-    }
-    
-    .notebook::before {
-      content: '';
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      width: 60px;
-      height: 80px;
-      background: repeating-linear-gradient(
-        transparent,
-        transparent 8px,
-        rgba(139, 69, 19, 0.1) 8px,
-        rgba(139, 69, 19, 0.1) 9px
-      );
-    }
-    
-    .coffee-mug {
-      position: absolute;
-      bottom: 30px;
-      right: 20px;
-      width: 25px;
-      height: 35px;
-      background: linear-gradient(135deg, #D2691E 0%, #CD853F 100%);
-      border-radius: 0 0 12px 12px;
-      box-shadow: 0 5px 15px rgba(210, 105, 30, 0.3);
-    }
-    
-    .pencil {
-      position: absolute;
-      top: 80px;
-      left: 30px;
-      width: 60px;
-      height: 4px;
-      background: linear-gradient(90deg, #DAA520 0%, #8B4513 100%);
-      border-radius: 2px;
-      transform: rotate(-15deg);
-      box-shadow: 0 2px 8px rgba(218, 165, 32, 0.3);
-    }
-    
-    .sparkle {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      width: 20px;
-      height: 20px;
-      background: radial-gradient(circle, #DAA520 0%, transparent 70%);
-      border-radius: 50%;
-      animation: sparkle 2s ease-in-out infinite;
-    }
-    
-    @keyframes sparkle {
-      0%, 100% { opacity: 0.3; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.2); }
-    }
-    
-    .mini-illustration {
-      opacity: 0.7;
-    }
-    
-    .feature-icon {
-      color: var(--primary-brown);
-    }
-  </style>
+  document.querySelectorAll(".js-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll(".js-tab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".js-tab-panel").forEach((panel) => panel.classList.add("d-none"));
+      document.getElementById(tab).classList.remove("d-none");
+    });
+  });
+</script>
 {% endblock %}

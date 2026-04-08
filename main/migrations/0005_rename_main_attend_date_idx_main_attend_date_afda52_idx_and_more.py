@@ -3,7 +3,36 @@
 import django.db.models.deletion
 import main.models
 from django.db import migrations, models
-from django.db.migrations.operations import RunSQL
+
+
+def migrate_vector_embedding(apps, schema_editor):
+    """
+    PostgreSQL-only migration for legacy databases.
+    For SQLite (local dev) and other engines this step is safely skipped.
+    """
+    if schema_editor.connection.vendor != "postgresql":
+        return
+
+    schema_editor.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='main_lecture' AND column_name='vector_embedding'
+            ) THEN
+                ALTER TABLE main_lecture DROP COLUMN vector_embedding;
+            END IF;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='main_lecture' AND column_name='vector_embedding'
+            ) THEN
+                ALTER TABLE main_lecture ADD COLUMN vector_embedding JSONB;
+            END IF;
+        END $$;
+        """
+    )
 
 
 class Migration(migrations.Migration):
@@ -28,29 +57,5 @@ class Migration(migrations.Migration):
             new_name='main_studen_email_dad883_idx',
             old_name='main_studen_email_idx',
         ),
-        # Удаляем старое поле vector_embedding (если оно было типа double precision[])
-        # и добавляем новое как JSONField
-        migrations.RunSQL(
-            sql="""
-                DO $$ 
-                BEGIN
-                    -- Удаляем старое поле, если оно существует
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name='main_lecture' AND column_name='vector_embedding'
-                    ) THEN
-                        ALTER TABLE main_lecture DROP COLUMN vector_embedding;
-                    END IF;
-                    
-                    -- Добавляем новое поле как JSONB, если его еще нет
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_name='main_lecture' AND column_name='vector_embedding'
-                    ) THEN
-                        ALTER TABLE main_lecture ADD COLUMN vector_embedding JSONB;
-                    END IF;
-                END $$;
-            """,
-            reverse_sql="-- Reverse migration not needed",
-        ),
+        migrations.RunPython(migrate_vector_embedding, migrations.RunPython.noop),
     ]

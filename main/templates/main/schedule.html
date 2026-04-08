@@ -1,7 +1,7 @@
 {% extends 'main/base.html' %}
 {% block title %}Расписание{% endblock %}
 {% block content %}
-<div class="row mb-4">
+<div class="row mb-4 reveal">
   <div class="col-12">
     <h1 class="mb-1">Мое расписание</h1>
     {% if user.profile and user.profile.group %}
@@ -16,7 +16,7 @@
 </div>
 
 {% if schedule %}
-  <div class="card">
+  <div class="card reveal">
     <div class="card-body">
       <div class="table-responsive">
         <table class="table table-hover">
@@ -58,7 +58,7 @@
     </div>
   </div>
 {% else %}
-  <div class="alert alert-info text-center">
+  <div class="alert alert-info text-center reveal">
     <i class="fas fa-calendar-times fa-3x mb-3 text-muted"></i>
     <h5>Расписание пусто</h5>
     <p class="mb-0">Для вас пока не назначено расписание занятий.</p>
@@ -73,7 +73,7 @@
 {% endif %}
 
 {% if user.profile.group %}
-  <div class="mt-4">
+  <div class="mt-4 reveal">
     <a href="{% url 'groups_list' %}" class="btn btn-outline-secondary">
       <i class="fas fa-list me-2"></i>Все группы
     </a>

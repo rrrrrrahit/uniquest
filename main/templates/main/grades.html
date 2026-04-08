@@ -1,27 +1,38 @@
 {% extends 'main/base.html' %}
 {% block title %}Оценки{% endblock %}
 {% block content %}
-<h3>Оценки</h3>
-<table class="table table-striped mt-3">
-  <thead>
-    <tr>
-      <th>Курс</th>
-      <th>Оценка</th>
-      <th>Дата</th>
-      <th>Примечание</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for g in grades %}
-      <tr>
-        <td><a href="{% url 'course_detail' g.course.pk %}">{{ g.course.name }}</a></td>
-        <td><span class="badge {% if g.value >= 90 %}bg-success{% elif g.value >= 80 %}bg-info{% elif g.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">{{ g.value }} ({{ g.letter_grade }})</span></td>
-        <td>{{ g.date|date:"d.m.Y" }}</td>
-        <td>{{ g.comment|default:"—" }}</td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="4" class="text-muted">Оценок пока нет.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="row mb-4 reveal">
+  <div class="col-12">
+    <h2 class="mb-1">Успеваемость</h2>
+    <p class="text-muted mb-0">Все оценки в хронологическом порядке и разрезе дисциплин.</p>
+  </div>
+</div>
+<div class="card reveal">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-striped mb-0">
+        <thead>
+          <tr>
+            <th>Курс</th>
+            <th>Оценка</th>
+            <th>Дата</th>
+            <th>Примечание</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in grades %}
+            <tr>
+              <td><a href="{% url 'course_detail' g.course.pk %}">{{ g.course.name }}</a></td>
+              <td><span class="badge {% if g.value >= 90 %}bg-success{% elif g.value >= 80 %}bg-info{% elif g.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">{{ g.value }} ({{ g.letter_grade }})</span></td>
+              <td>{{ g.date|date:"d.m.Y" }}</td>
+              <td>{{ g.comment|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">Оценок пока нет.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {% endblock %}

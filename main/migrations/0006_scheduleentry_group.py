@@ -1,6 +1,32 @@
 from django.db import migrations, models
 import django.db.models.deletion
-from django.db.migrations.operations import SeparateDatabaseAndState
+
+
+def add_scheduleentry_group_column(apps, schema_editor):
+    if schema_editor.connection.vendor == "postgresql":
+        schema_editor.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='main_scheduleentry' AND column_name='group_id'
+                ) THEN
+                    ALTER TABLE main_scheduleentry
+                    ADD COLUMN group_id INTEGER NULL
+                    REFERENCES main_group(id) ON DELETE SET NULL;
+                END IF;
+            END $$;
+            """
+        )
+        return
+
+    # SQLite/local: добавляем колонку только если ее нет.
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("PRAGMA table_info(main_scheduleentry)")
+        columns = [row[1] for row in cursor.fetchall()]
+    if "group_id" not in columns:
+        schema_editor.execute("ALTER TABLE main_scheduleentry ADD COLUMN group_id INTEGER NULL")
 
 
 class Migration(migrations.Migration):
@@ -12,27 +38,9 @@ class Migration(migrations.Migration):
     operations = [
         # Используем SeparateDatabaseAndState для правильного управления состоянием
         migrations.SeparateDatabaseAndState(
-            # Операции с базой данных - проверяем и добавляем поле только если его нет
             database_operations=[
-                migrations.RunSQL(
-                    sql="""
-                        DO $$ 
-                        BEGIN
-                            -- Добавляем поле group_id только если его еще нет
-                            IF NOT EXISTS (
-                                SELECT 1 FROM information_schema.columns 
-                                WHERE table_name='main_scheduleentry' AND column_name='group_id'
-                            ) THEN
-                                ALTER TABLE main_scheduleentry 
-                                ADD COLUMN group_id INTEGER NULL 
-                                REFERENCES main_group(id) ON DELETE SET NULL;
-                            END IF;
-                        END $$;
-                    """,
-                    reverse_sql="-- Reverse migration not needed",
-                ),
+                migrations.RunPython(add_scheduleentry_group_column, migrations.RunPython.noop),
             ],
-            # Операции с состоянием Django - добавляем поле в модель
             state_operations=[
                 migrations.AddField(
                     model_name='scheduleentry',

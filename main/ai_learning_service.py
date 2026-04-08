@@ -416,6 +416,22 @@ def get_ai_recommendations(student, course):
                 'text': f'Ваше продуктивное время: {time_map.get(profile.preferred_study_time, "День")}',
                 'icon': 'fa-clock'
             })
+
+        # Рекомендации по скорости обучения
+        if profile and profile.learning_velocity:
+            velocity = float(profile.learning_velocity)
+            if velocity < 0.9:
+                velocity_text = 'Рекомендуется режим микро-сессий: 25-30 минут учебы и 5 минут перерыва.'
+            elif velocity > 1.2:
+                velocity_text = 'Можно использовать интенсивные блоки 60-90 минут с контрольными мини-тестами.'
+            else:
+                velocity_text = 'Поддерживайте стабильный темп: 45-60 минут и краткое закрепление материала.'
+            recommendations.append({
+                'type': 'velocity',
+                'title': 'Скорость обучения',
+                'text': velocity_text,
+                'icon': 'fa-gauge-high'
+            })
     except Exception:
         pass
     
@@ -440,6 +456,19 @@ def get_ai_recommendations(student, course):
                     'text': f'Сосредоточьтесь на: {focus_topics_str}',
                     'icon': 'fa-bullseye'
                 })
+
+            # Фактор посещаемости с источником данных мониторинга
+            attendance_rate = float(prediction.attendance_rate or 0)
+            recommendations.append({
+                'type': 'attendance',
+                'title': 'Посещаемость (САПАР)',
+                'text': (
+                    f'Текущая посещаемость: {attendance_rate:.1f}%. '
+                    'Показатель формируется на основе мониторинга посещаемости '
+                    'системой "САПАР" (камеры в лекционных аудиториях АТУ).'
+                ),
+                'icon': 'fa-video'
+            })
     except Exception:
         pass
     

@@ -81,38 +81,32 @@ TEMPLATES = [
 WSGI_APPLICATION = 'uniquest.wsgi.application'
 
 # --- БАЗА ДАННЫХ ---
-# Приоритет: DATABASE_URL (от Render) > отдельные переменные > значения по умолчанию
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'uniquestus'),
-        'USER': os.environ.get('DB_USER', 'uniquest_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-        'OPTIONS': {
-            'connect_timeout': 10,
-        },
-        'CONN_MAX_AGE': 600,
-    }
-}
+# Для локальной разработки по умолчанию используем SQLite.
+# PostgreSQL включается через DATABASE_URL или явные DB_* переменные.
+USE_SQLITE = os.environ.get('USE_SQLITE', 'False').lower() in ('1', 'true', 'yes')
 
-# Использование DATABASE_URL от Render (приоритет)
-if 'DATABASE_URL' in os.environ:
+if USE_SQLITE:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+elif 'DATABASE_URL' in os.environ:
     try:
         import dj_database_url
-        DATABASES['default'] = dj_database_url.config(
+        DATABASES = {'default': dj_database_url.config(
             default=os.environ.get('DATABASE_URL'),
             conn_max_age=600,
             conn_health_checks=True,
-        )
+        )}
     except ImportError:
         # Если dj-database-url не установлен, парсим вручную
         import urllib.parse
         db_url = os.environ.get('DATABASE_URL')
         if db_url:
             parsed = urllib.parse.urlparse(db_url)
-            DATABASES['default'] = {
+            DATABASES = {'default': {
                 'ENGINE': 'django.db.backends.postgresql',
                 'NAME': parsed.path[1:] if parsed.path.startswith('/') else parsed.path,
                 'USER': parsed.username,
@@ -123,31 +117,40 @@ if 'DATABASE_URL' in os.environ:
                     'connect_timeout': 10,
                 },
                 'CONN_MAX_AGE': 600,
+            }}
+        else:
+            DATABASES = {
+                'default': {
+                    'ENGINE': 'django.db.backends.sqlite3',
+                    'NAME': BASE_DIR / 'db.sqlite3',
+                }
             }
 else:
-    # Если DATABASE_URL не установлен, используем отдельные переменные
-    # Проверяем, что есть хотя бы HOST (не localhost) или PASSWORD (значит настроено)
     db_host = os.environ.get('DB_HOST', '')
     db_password = os.environ.get('DB_PASSWORD', '')
-    
-    if db_host and db_host != 'localhost' and 'localhost' not in db_host:
-        # Используем отдельные переменные если HOST указан и не localhost
-        DATABASES['default'].update({
-            'NAME': os.environ.get('DB_NAME', DATABASES['default']['NAME']),
-            'USER': os.environ.get('DB_USER', DATABASES['default']['USER']),
-            'PASSWORD': db_password or DATABASES['default']['PASSWORD'],
-            'HOST': db_host,
-            'PORT': os.environ.get('DB_PORT', DATABASES['default']['PORT']),
-        })
-    elif db_password and db_password != DATABASES['default']['PASSWORD']:
-        # Если есть пароль от Render, используем его с другими переменными
-        DATABASES['default'].update({
-            'NAME': os.environ.get('DB_NAME', DATABASES['default']['NAME']),
-            'USER': os.environ.get('DB_USER', DATABASES['default']['USER']),
-            'PASSWORD': db_password,
-            'HOST': db_host or DATABASES['default']['HOST'],
-            'PORT': os.environ.get('DB_PORT', DATABASES['default']['PORT']),
-        })
+
+    if db_password or (db_host and db_host not in ('localhost', '127.0.0.1')):
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': os.environ.get('DB_NAME', 'uniquestus'),
+                'USER': os.environ.get('DB_USER', 'uniquest_user'),
+                'PASSWORD': db_password,
+                'HOST': db_host or 'localhost',
+                'PORT': os.environ.get('DB_PORT', '5432'),
+                'OPTIONS': {
+                    'connect_timeout': 10,
+                },
+                'CONN_MAX_AGE': 600,
+            }
+        }
+    else:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
 
 # --- ПАРОЛИ ---
 AUTH_PASSWORD_VALIDATORS = [

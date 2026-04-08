@@ -9,6 +9,24 @@ from django.db.migrations.operations import SeparateDatabaseAndState
 from django.db.migrations import RunPython
 
 
+def drop_scheduleentry_group_column_if_exists(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    schema_editor.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='main_scheduleentry' AND column_name='group_id'
+            ) THEN
+                ALTER TABLE main_scheduleentry DROP COLUMN group_id;
+            END IF;
+        END $$;
+        """
+    )
+
+
 def remove_group_field_from_state(apps, schema_editor):
     """Безопасно удаляем поле group из состояния Django, если оно существует"""
     ScheduleEntry = apps.get_model('main', 'ScheduleEntry')
@@ -75,21 +93,7 @@ class Migration(migrations.Migration):
         # Безопасное удаление поля group - проверяем существование перед удалением
         migrations.SeparateDatabaseAndState(
             database_operations=[
-                migrations.RunSQL(
-                    sql="""
-                        DO $$ 
-                        BEGIN
-                            -- Удаляем колонку group_id только если она существует
-                            IF EXISTS (
-                                SELECT 1 FROM information_schema.columns 
-                                WHERE table_name='main_scheduleentry' AND column_name='group_id'
-                            ) THEN
-                                ALTER TABLE main_scheduleentry DROP COLUMN group_id;
-                            END IF;
-                        END $$;
-                    """,
-                    reverse_sql="-- Reverse migration not needed",
-                ),
+                migrations.RunPython(drop_scheduleentry_group_column_if_exists, migrations.RunPython.noop),
             ],
             state_operations=[
                 RunPython(

@@ -1,36 +1,48 @@
 {% extends 'main/base.html' %}
 {% block title %}{{ course.name }}{% endblock %}
 {% block content %}
-<div class="row">
-  <div class="col-md-8">
+<div class="row mb-4 reveal">
+  <div class="col-12">
     <div class="card p-3">
-      <h3>{{ course.name }}</h3>
-      <p class="text-muted">Преподаватель: {{ course.teacher }}</p>
-      <p>{{ course.description }}</p>
+      <h3 class="mb-1">{{ course.name }}</h3>
+      <p class="text-muted mb-2">Преподаватель: {{ course.teacher|default:"Не назначен" }}</p>
+      <p class="mb-0">{{ course.description|default:"Описание курса пока не добавлено." }}</p>
     </div>
-
-    <h5 class="mt-4">Оценки по курсу</h5>
-    <ul class="list-group">
-      {% for grade in grades %}
-        <li class="list-group-item">{{ grade.date|date:"d.m.Y" }} — {{ grade.value }} ({{ grade.letter_grade }}) 
-          {% if grade.comment %}<span class="text-muted">— {{ grade.comment }}</span>{% endif %}
-        </li>
-      {% empty %}
-        <li class="list-group-item text-muted">Оценок нет</li>
-      {% endfor %}
-    </ul>
   </div>
-  <div class="col-md-4">
-    <h5>Расписание по курсу</h5>
-    <ul class="list-group">
-      {% for s in schedule %}
-        <li class="list-group-item">{{ s.get_weekday_display }}: {{ s.start_time }}—{{ s.end_time }} 
-          {% if s.classroom %}<div class="small text-muted">{{ s.classroom }}</div>{% endif %}
-        </li>
-      {% empty %}
-        <li class="list-group-item text-muted">Нет занятий</li>
-      {% endfor %}
-    </ul>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-8 reveal">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Оценки по курсу</h5></div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for grade in grades %}
+            <li class="list-group-item">{{ grade.date|date:"d.m.Y" }} — {{ grade.value }} ({{ grade.letter_grade }})
+              {% if grade.comment %}<span class="text-muted">— {{ grade.comment }}</span>{% endif %}
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">Оценок нет</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4 reveal">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Расписание</h5></div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for s in schedule %}
+            <li class="list-group-item">{{ s.get_weekday_display }}: {{ s.start_time }}—{{ s.end_time }}
+              {% if s.classroom %}<div class="small text-muted">{{ s.classroom }}</div>{% endif %}
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">Нет занятий</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

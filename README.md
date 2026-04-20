@@ -22,9 +22,13 @@ python manage.py train_grade_model --save-path=models/grade_model.pkl
 # 5. Проиндексируйте лекции для семантического поиска
 python manage.py index_lectures
 
-# 6. Запустите сервер
+# 6. Запустите сервер (общий доступ в локальной сети)
 python manage.py runserver
 ```
+
+После запуска сайт будет доступен:
+- локально: `http://127.0.0.1:8000/`
+- в вашей локальной сети: `http://<ваш-ip>:8000/`
 
 ### Развёртывание на Render
 
@@ -33,7 +37,12 @@ python manage.py runserver
 - **Build Command:**  
   `pip install -r requirements.txt && python manage.py collectstatic --noinput`
 - **Start Command:**  
-  `python manage.py migrate --noinput && gunicorn uniquest.wsgi:application`
+  `python manage.py migrate --noinput && gunicorn uniquest.wsgi:application --bind 0.0.0.0:$PORT`
+
+Для публичного домена (например, `uniquest.kz`) добавьте переменные окружения:
+
+- `ALLOWED_HOSTS=.onrender.com,uniquest.kz,www.uniquest.kz`
+- `CSRF_TRUSTED_ORIGINS=https://*.onrender.com,https://uniquest.kz,https://www.uniquest.kz`
 
 После первого запуска выполните в Render Shell:
 

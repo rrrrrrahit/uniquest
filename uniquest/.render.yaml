@@ -3,8 +3,15 @@ services:
     name: uniquest
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn uniquest.wsgi:application"
+    startCommand: "python manage.py migrate --noinput && gunicorn uniquest.wsgi:application --bind 0.0.0.0:$PORT"
+    healthCheckPath: /
     envVars:
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,uniquest.kz,www.uniquest.kz"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com,https://uniquest.kz,https://www.uniquest.kz"
       - key: DJANGO_SETTINGS_MODULE
         value: uniquest.settings
       - key: PYTHON_VERSION

@@ -20,6 +20,15 @@ if ALLOWED_HOSTS_ENV:
 else:
     ALLOWED_HOSTS = ['*']
 
+# --- CSRF trusted origins ---
+CSRF_TRUSTED_ORIGINS_ENV = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if CSRF_TRUSTED_ORIGINS_ENV:
+    CSRF_TRUSTED_ORIGINS = [
+        origin.strip() for origin in CSRF_TRUSTED_ORIGINS_ENV.split(',') if origin.strip()
+    ]
+else:
+    CSRF_TRUSTED_ORIGINS = []
+
 # Автоматическое добавление хостов Render
 render_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if render_host:
@@ -30,6 +39,8 @@ if render_host:
 
 # Безопасность для production
 if not DEBUG:
+    # Корректно определяем HTTPS за reverse proxy (Render/Nginx и т.д.)
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

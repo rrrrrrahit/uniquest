@@ -25,7 +25,15 @@
                 <td>{{ entry.start_time }} - {{ entry.end_time }}</td>
                 <td>{{ entry.course.name }}</td>
                 <td>{{ entry.classroom|default:"—" }}</td>
-                <td>{{ entry.group.name|default:"—" }}</td>
+                <td>
+                  {% for profile in entry.groups.all %}
+                    {% if profile.group %}
+                      {{ profile.group.name }}{% if not forloop.last %}, {% endif %}
+                    {% endif %}
+                  {% empty %}
+                    —
+                  {% endfor %}
+                </td>
               </tr>
             {% endfor %}
           </tbody>

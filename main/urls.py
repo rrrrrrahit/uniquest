@@ -25,6 +25,7 @@ urlpatterns = [
     path('teacher/courses/', views.teacher_courses, name='teacher_courses'),
     path('teacher/grades/', views.teacher_grades, name='teacher_grades'),
     path('teacher/schedule/', views.teacher_schedule, name='teacher_schedule'),
+    path('teacher/students/<int:student_id>/analysis/', views.teacher_student_analysis, name='teacher_student_analysis'),
     path('teacher/ai-analysis/<int:student_id>/<int:course_id>/', views.ai_analysis_view, name='ai_analysis'),
 
     # Публичные академические страницы

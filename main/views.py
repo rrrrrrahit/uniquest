@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse
 from functools import wraps
+from collections import defaultdict
 from datetime import timedelta
 from .forms import (
     UserRegisterForm,
@@ -41,38 +42,20 @@ from .search_service import semantic_search
 
 # ===== Главная и авторизация =====
 def index(request):
-    courses = Course.objects.select_related("subject", "teacher").all()[:6]
-    total_students = Student.objects.count()
-    total_groups = Group.objects.count()
-    total_subjects = Subject.objects.count()
-    total_courses = Course.objects.count()
+    if request.user.is_authenticated:
+        profile = getattr(request.user, 'profile', None)
+        if profile and profile.role == Profile.ROLE_TEACHER:
+            return redirect('teacher_dashboard')
+        return redirect('dashboard')
 
-    top_groups = (
-        Group.objects.annotate(student_count=Count("student_group"))
-        .order_by("-student_count", "-year", "name")[:6]
-    )
-
-    top_subjects = (
-        Subject.objects.annotate(course_count=Count("courses"))
-        .order_by("-course_count", "code")[:8]
-    )
-
-    return render(
-        request,
-        'main/index.html',
-        {
-            'courses': courses,
-            'total_students': total_students,
-            'total_groups': total_groups,
-            'total_subjects': total_subjects,
-            'total_courses': total_courses,
-            'top_groups': top_groups,
-            'top_subjects': top_subjects,
-        },
-    )
+    return render(request, 'main/index.html')
 
 def create_test_student_view(request):
-    """Простая страница для создания тестового студента (доступна без авторизации для удобства)"""
+    """Простая страница для создания тестового студента (только для staff)."""
+    if not request.user.is_authenticated or not request.user.is_staff:
+        messages.error(request, 'Доступ запрещён.')
+        return redirect('login')
+
     from django.contrib.auth.models import User
     
     # Также создаем администратора, если его нет
@@ -681,6 +664,10 @@ document.getElementById("myButton").addEventListener("click", function() {
 
 def create_test_teacher_view(request):
     """Создает тестового преподавателя и базовые учебные данные для демо."""
+    if not request.user.is_authenticated or not request.user.is_staff:
+        messages.error(request, 'Доступ запрещён.')
+        return redirect('login')
+
     if request.method == 'POST':
         try:
             username = 'test_teacher'
@@ -737,6 +724,9 @@ def create_test_teacher_view(request):
     return render(request, 'main/create_test_teacher.html')
 
 def register_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+
     if request.method == 'POST':
         form = UserRegisterForm(request.POST)
         if form.is_valid():
@@ -785,6 +775,9 @@ def register_view(request):
     return render(request, 'main/register.html', {'form': form})
 
 def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+
     if request.method == 'POST':
         form = AuthenticationForm(request=request, data=request.POST)
         if form.is_valid():
@@ -825,6 +818,210 @@ def student_required(view_func):
             return redirect('dashboard')
         return view_func(request, *args, **kwargs)
     return _wrapped
+
+
+def staff_required(view_func):
+    return user_passes_test(lambda u: u.is_authenticated and u.is_staff)(view_func)
+
+
+def _compute_grade_trend(values):
+    if len(values) < 4:
+        return 0.0
+    window = min(3, max(1, len(values) // 2))
+    first_avg = sum(values[:window]) / window
+    last_avg = sum(values[-window:]) / window
+    return last_avg - first_avg
+
+
+def build_student_performance_report(student_user, teacher=None):
+    student_obj = Student.objects.filter(user=student_user).first()
+    if not student_obj:
+        return {
+            "student_obj": None,
+            "overall_avg": 0.0,
+            "overall_attendance": 0.0,
+            "overall_submission_rate": 0.0,
+            "overall_risk_level": "low",
+            "overall_risk_score": 0,
+            "course_reports": [],
+            "risk_triggers": [],
+            "top_strengths": [],
+            "top_weaknesses": [],
+            "threats": [],
+            "recommendations": ["Недостаточно данных для аналитики. Обратитесь к куратору/преподавателю."],
+        }
+
+    enrollments = Enrollment.objects.filter(student=student_obj).select_related("course")
+    if teacher:
+        enrollments = enrollments.filter(course__teacher=teacher)
+
+    course_reports = []
+    risk_triggers = []
+    strong_topics = defaultdict(list)
+    weak_topics = defaultdict(list)
+
+    all_grade_values = []
+    total_attendance_records = 0
+    total_attended = 0
+    total_assignments = 0
+    total_submissions = 0
+
+    for enrollment in enrollments:
+        course = enrollment.course
+        grades_qs = Grade.objects.filter(student=student_user, course=course).order_by("date")
+        grade_values = [float(g.value) for g in grades_qs]
+        avg_grade = (sum(grade_values) / len(grade_values)) if grade_values else 0.0
+        trend = _compute_grade_trend(grade_values)
+        all_grade_values.extend(grade_values)
+
+        attendance_qs = Attendance.objects.filter(enrollment=enrollment)
+        att_total = attendance_qs.count()
+        att_present = attendance_qs.filter(present=True).count()
+        attendance_rate = (att_present * 100 / att_total) if att_total else 0.0
+        total_attendance_records += att_total
+        total_attended += att_present
+
+        assignments_total = Assignment.objects.filter(course=course).count()
+        submissions_total = Submission.objects.filter(
+            student=student_user, assignment__course=course
+        ).count()
+        submission_rate = (submissions_total * 100 / assignments_total) if assignments_total else 100.0
+        total_assignments += assignments_total
+        total_submissions += submissions_total
+
+        topic_stats = (
+            Grade.objects.filter(student=student_user, course=course)
+            .exclude(topic__isnull=True)
+            .exclude(topic__exact="")
+            .values("topic")
+            .annotate(avg_topic=Avg("value"), topic_items=Count("id"))
+            .order_by("-avg_topic")
+        )
+        course_strengths = []
+        course_weaknesses = []
+        for row in topic_stats:
+            topic_name = row["topic"]
+            topic_avg = float(row["avg_topic"] or 0)
+            if topic_avg >= 85:
+                strong_topics[topic_name].append(topic_avg)
+                course_strengths.append({"topic": topic_name, "avg": topic_avg})
+            elif topic_avg <= 70:
+                weak_topics[topic_name].append(topic_avg)
+                course_weaknesses.append({"topic": topic_name, "avg": topic_avg})
+
+        risk_score = 0
+        indicators = []
+        if avg_grade < 60:
+            risk_score += 45
+            indicators.append("Критически низкий средний балл")
+        elif avg_grade < 70:
+            risk_score += 25
+            indicators.append("Средний балл ниже целевого")
+
+        if attendance_rate < 65:
+            risk_score += 35
+            indicators.append("Низкая посещаемость (САПАР)")
+        elif attendance_rate < 80:
+            risk_score += 20
+            indicators.append("Посещаемость ниже рекомендуемой")
+
+        if trend < -8:
+            risk_score += 25
+            indicators.append("Сильный негативный тренд оценок")
+        elif trend < -4:
+            risk_score += 15
+            indicators.append("Отрицательная динамика успеваемости")
+
+        if submission_rate < 60:
+            risk_score += 20
+            indicators.append("Низкая доля сданных заданий")
+        elif submission_rate < 80:
+            risk_score += 10
+            indicators.append("Нестабильная сдача заданий")
+
+        if not grade_values:
+            risk_score += 10
+            indicators.append("Недостаточно оценок для устойчивой траектории")
+
+        if risk_score >= 70:
+            risk_level = "critical"
+        elif risk_score >= 45:
+            risk_level = "high"
+        elif risk_score >= 20:
+            risk_level = "medium"
+        else:
+            risk_level = "low"
+
+        if indicators:
+            risk_triggers.append({"course": course, "items": indicators, "level": risk_level})
+
+        course_reports.append(
+            {
+                "course": course,
+                "avg_grade": avg_grade,
+                "attendance_rate": attendance_rate,
+                "submission_rate": submission_rate,
+                "trend": trend,
+                "risk_score": risk_score,
+                "risk_level": risk_level,
+                "risk_indicators": indicators,
+                "strengths": course_strengths[:3],
+                "weaknesses": course_weaknesses[:3],
+            }
+        )
+
+    course_reports.sort(key=lambda item: item["risk_score"], reverse=True)
+
+    overall_avg = (sum(all_grade_values) / len(all_grade_values)) if all_grade_values else 0.0
+    overall_attendance = (total_attended * 100 / total_attendance_records) if total_attendance_records else 0.0
+    overall_submission_rate = (total_submissions * 100 / total_assignments) if total_assignments else 100.0
+    overall_risk_score = int(sum(item["risk_score"] for item in course_reports) / len(course_reports)) if course_reports else 0
+
+    if overall_risk_score >= 70:
+        overall_risk_level = "critical"
+    elif overall_risk_score >= 45:
+        overall_risk_level = "high"
+    elif overall_risk_score >= 20:
+        overall_risk_level = "medium"
+    else:
+        overall_risk_level = "low"
+
+    top_strengths = sorted(
+        [{"topic": topic, "avg": sum(vals) / len(vals)} for topic, vals in strong_topics.items()],
+        key=lambda row: row["avg"],
+        reverse=True,
+    )[:5]
+    top_weaknesses = sorted(
+        [{"topic": topic, "avg": sum(vals) / len(vals)} for topic, vals in weak_topics.items()],
+        key=lambda row: row["avg"],
+    )[:5]
+
+    threats = [item for item in course_reports if item["risk_level"] in ("critical", "high")]
+    recommendations = []
+    if overall_attendance < 80:
+        recommendations.append("Повысить посещаемость до уровня не ниже 80%.")
+    if overall_submission_rate < 85:
+        recommendations.append("Стабилизировать сдачу заданий и исключить пропуски дедлайнов.")
+    if top_weaknesses:
+        weak_topics_list = ", ".join([row["topic"] for row in top_weaknesses[:3]])
+        recommendations.append(f"Приоритетно проработать темы: {weak_topics_list}.")
+    if not recommendations:
+        recommendations.append("Траектория стабильна. Сфокусируйтесь на закреплении сильных тем и экзаменационной подготовке.")
+
+    return {
+        "student_obj": student_obj,
+        "overall_avg": overall_avg,
+        "overall_attendance": overall_attendance,
+        "overall_submission_rate": overall_submission_rate,
+        "overall_risk_level": overall_risk_level,
+        "overall_risk_score": overall_risk_score,
+        "course_reports": course_reports,
+        "risk_triggers": risk_triggers,
+        "top_strengths": top_strengths,
+        "top_weaknesses": top_weaknesses,
+        "threats": threats,
+        "recommendations": recommendations,
+    }
 
 # ===== Панель пользователя =====
 @login_required
@@ -978,80 +1175,68 @@ def dashboard(request):
 @login_required
 @student_required
 def student_passport_view(request):
-    """Паспорт студента: академическая траектория и триггеры риска."""
-    student = get_object_or_404(Student, user=request.user)
-    enrollments = Enrollment.objects.filter(student=student).select_related("course")
-
-    trajectory = []
-    risk_triggers = []
-    total_attended = 0
-    total_attendance_records = 0
-    overall_avg = Grade.objects.filter(student=request.user).aggregate(avg=Avg("value"))["avg"] or 0
-
-    for enr in enrollments:
-        grades_qs = Grade.objects.filter(enrollment=enr).order_by("date")
-        attendance_qs = Attendance.objects.filter(enrollment=enr)
-
-        avg_grade = grades_qs.aggregate(avg=Avg("value"))["avg"] or 0
-        first_three = [float(g.value) for g in grades_qs[:3]]
-        last_three = [float(g.value) for g in grades_qs.reverse()[:3]] if grades_qs.exists() else []
-        trend = 0
-        if first_three and last_three:
-            trend = (sum(last_three) / len(last_three)) - (sum(first_three) / len(first_three))
-
-        total = attendance_qs.count()
-        present = attendance_qs.filter(present=True).count()
-        attendance_rate = (present * 100 / total) if total else 0
-        total_attended += present
-        total_attendance_records += total
-
-        course_triggers = []
-        if avg_grade < 65:
-            course_triggers.append("Успеваемость ниже порога 65")
-        if attendance_rate < 70:
-            course_triggers.append("Посещаемость ниже порога 70% (САПАР)")
-        if trend < -5:
-            course_triggers.append("Негативный тренд оценок")
-
-        if course_triggers:
-            risk_triggers.append({"course": enr.course, "items": course_triggers})
-
-        trajectory.append(
-            {
-                "course": enr.course,
-                "avg_grade": avg_grade,
-                "attendance_rate": attendance_rate,
-                "trend": trend,
-                "status": "stable" if trend >= -2 else "decline",
-            }
-        )
-
-    overall_attendance = (total_attended * 100 / total_attendance_records) if total_attendance_records else 0
+    """Паспорт студента: глубокий анализ сильных/слабых сторон и рисков."""
+    report = build_student_performance_report(request.user)
+    trajectory = [
+        {
+            "course": item["course"],
+            "avg_grade": item["avg_grade"],
+            "attendance_rate": item["attendance_rate"],
+            "trend": item["trend"],
+            "submission_rate": item["submission_rate"],
+            "risk_level": item["risk_level"],
+        }
+        for item in report["course_reports"]
+    ]
 
     return render(
         request,
         "main/student_passport.html",
         {
-            "student_obj": student,
-            "overall_avg": overall_avg,
-            "overall_attendance": overall_attendance,
+            "student_obj": report["student_obj"],
+            "overall_avg": report["overall_avg"],
+            "overall_attendance": report["overall_attendance"],
+            "overall_submission_rate": report["overall_submission_rate"],
+            "overall_risk_level": report["overall_risk_level"],
+            "overall_risk_score": report["overall_risk_score"],
             "trajectory": trajectory,
-            "risk_triggers": risk_triggers,
+            "risk_triggers": report["risk_triggers"],
+            "top_strengths": report["top_strengths"],
+            "top_weaknesses": report["top_weaknesses"],
+            "threats": report["threats"],
+            "recommendations": report["recommendations"],
         },
     )
 
 @login_required
 def course_detail(request, pk):
     course = get_object_or_404(Course, pk=pk)
+    user_profile = getattr(request.user, "profile", None)
+    if request.user.is_staff and not user_profile:
+        user_profile = None
+
+    if request.user.is_staff and not user_profile:
+        pass
+    elif user_profile and user_profile.role == Profile.ROLE_TEACHER:
+        if course.teacher_id != request.user.id:
+            messages.error(request, "Доступ к курсу разрешён только его преподавателю.")
+            return redirect("teacher_dashboard")
+    else:
+        has_access = Enrollment.objects.filter(student__user=request.user, course=course).exists()
+        if not has_access:
+            messages.error(request, "Доступ к курсу разрешён только записанным студентам.")
+            return redirect("dashboard")
+
     assignments = Assignment.objects.filter(course=course)
     recommendations = Recommendation.objects.filter(submission__assignment__in=assignments)
     schedule = ScheduleEntry.objects.filter(course=course).order_by('weekday', 'start_time')
     
     # Получаем оценки для текущего пользователя (если студент) или все (если преподаватель)
-    if hasattr(request.user, 'profile') and request.user.profile.role == Profile.ROLE_TEACHER:
+    if user_profile and user_profile.role == Profile.ROLE_TEACHER:
         grades = Grade.objects.filter(course=course).select_related('student').order_by('-date')
     else:
         grades = Grade.objects.filter(course=course, student=request.user).order_by('-date')
+        recommendations = recommendations.filter(submission__student=request.user)
     
     return render(request, 'main/course_detail.html', {
         'course': course,
@@ -1065,7 +1250,12 @@ def course_detail(request, pk):
 def profile_view(request):
     if request.method == 'POST':
         u_form = UserUpdateForm(request.POST, instance=request.user)
-        p_form = ProfileUpdateForm(request.POST, request.FILES, instance=request.user.profile)
+        p_form = ProfileUpdateForm(
+            request.POST,
+            request.FILES,
+            instance=request.user.profile,
+            user=request.user,
+        )
         if u_form.is_valid() and p_form.is_valid():
             u_form.save()
             p_form.save()
@@ -1073,7 +1263,7 @@ def profile_view(request):
             return redirect('profile')
     else:
         u_form = UserUpdateForm(instance=request.user)
-        p_form = ProfileUpdateForm(instance=request.user.profile)
+        p_form = ProfileUpdateForm(instance=request.user.profile, user=request.user)
     return render(request, 'main/profile.html', {'u_form': u_form, 'p_form': p_form})
 
 @login_required
@@ -1151,6 +1341,18 @@ def ai_assistant(request):
         query = request.GET.get('q', '').strip()
         search_results = []
         suggested_questions = []
+        focus_areas = []
+
+        # Персональные фокусы: слабые темы и курсы с риском.
+        performance_report = build_student_performance_report(user)
+        for weak in performance_report.get("top_weaknesses", [])[:4]:
+            focus_areas.append(
+                {
+                    "title": f"Тема: {weak['topic']}",
+                    "query": weak["topic"],
+                    "hint": f"Средний балл по теме: {weak['avg']:.1f}",
+                }
+            )
         
         if query:
             try:
@@ -1193,6 +1395,28 @@ def ai_assistant(request):
                     search_results = filtered_results + other_results[:5]
                 else:
                     search_results = all_results[:10]
+
+                if not search_results:
+                    # Надёжный fallback на keyword-поиск по лекциям и курсам.
+                    fallback_qs = Lecture.objects.select_related("course").filter(
+                        Q(title__icontains=query)
+                        | Q(content_text__icontains=query)
+                        | Q(course__name__icontains=query)
+                    )
+                    if student_courses:
+                        fallback_qs = fallback_qs.filter(course__in=student_courses)
+                    fallback_qs = fallback_qs[:10]
+                    for lecture in fallback_qs:
+                        snippet_source = lecture.content_text or ""
+                        search_results.append(
+                            {
+                                "id": lecture.id,
+                                "title": lecture.title,
+                                "snippet": snippet_source[:240] + ("..." if len(snippet_source) > 240 else ""),
+                                "score": 0.0,
+                                "lecture": lecture,
+                            }
+                        )
             except Exception as e:
                 # Если поиск не работает, показываем пустые результаты
                 import logging
@@ -1232,6 +1456,7 @@ def ai_assistant(request):
             'popular_questions': popular_questions,
             'specialty': specialty,
             'student_courses': student_courses,
+            'focus_areas': focus_areas,
         })
     except Exception as e:
         # Общая обработка ошибок
@@ -1250,6 +1475,7 @@ def ai_assistant(request):
             'popular_questions': [],
             'specialty': None,
             'student_courses': [],
+            'focus_areas': [],
         })
 
 
@@ -1431,6 +1657,8 @@ def create_study_plan_view(request, course_id):
 
 # ===== Публичные академические страницы =====
 
+@login_required
+@teacher_required
 def groups_list(request):
     """Список всех групп"""
     groups = Group.objects.all().order_by('-year', 'name')
@@ -1442,6 +1670,8 @@ def groups_list(request):
         )
     return render(request, 'main/groups_list.html', {'groups': groups})
 
+@login_required
+@teacher_required
 def group_schedule(request, group_id: int):
     group = get_object_or_404(Group, id=group_id)
     # Получаем профили студентов этой группы
@@ -1462,6 +1692,8 @@ def group_schedule(request, group_id: int):
     )
 
 
+@login_required
+@teacher_required
 def student_public_profile(request, pk: int):
     student = get_object_or_404(Student, id=pk)
     enrollments = (
@@ -1498,6 +1730,7 @@ def student_public_profile(request, pk: int):
     )
 
 
+@login_required
 def course_lectures(request, pk: int):
     course = get_object_or_404(Course, pk=pk)
     lectures = Lecture.objects.filter(course=course).order_by("created_at")
@@ -1517,6 +1750,7 @@ def course_lectures(request, pk: int):
     )
 
 
+@login_required
 def lecture_detail(request, pk: int):
     lecture = get_object_or_404(Lecture, pk=pk)
     related = semantic_search(lecture.title, top_k=5)
@@ -1530,6 +1764,8 @@ def lecture_detail(request, pk: int):
     )
 
 
+@login_required
+@staff_required
 def demo_page(request):
     # Несколько случайных студентов и курсов для демонстрации
     students = Student.objects.all()[:10]
@@ -1594,6 +1830,38 @@ def teacher_dashboard(request):
     avg_score = Grade.objects.filter(course__teacher=user).aggregate(avg=Avg('value'))['avg'] or 0
     
     recent_grades = Grade.objects.filter(course__teacher=user).select_related('student', 'course').order_by('-date')[:10]
+    advisee_enrollments = (
+        Enrollment.objects.filter(course__teacher=user, student__user__isnull=False)
+        .select_related("student__user", "course")
+        .order_by("student__last_name", "student__first_name")
+    )
+    advisee_map = {}
+    for enrollment in advisee_enrollments:
+        student_user = enrollment.student.user
+        if not student_user:
+            continue
+        row = advisee_map.setdefault(
+            student_user.id,
+            {
+                "student_user": student_user,
+                "courses": [],
+            },
+        )
+        row["courses"].append(enrollment.course.name)
+
+    advisee_students = []
+    for row in advisee_map.values():
+        report = build_student_performance_report(row["student_user"], teacher=user)
+        advisee_students.append(
+            {
+                "student_user": row["student_user"],
+                "courses": ", ".join(sorted(set(row["courses"]))),
+                "risk_level": report["overall_risk_level"],
+                "risk_score": report["overall_risk_score"],
+                "overall_avg": report["overall_avg"],
+            }
+        )
+    advisee_students.sort(key=lambda item: item["risk_score"], reverse=True)
     
     return render(request, 'main/teacher_dashboard.html', {
         'courses': courses,
@@ -1603,6 +1871,7 @@ def teacher_dashboard(request):
         'recent_grades': recent_grades,
         'grade_form': grade_form,
         'lecture_form': lecture_form,
+        'advisee_students': advisee_students[:30],
     })
 
 @login_required
@@ -1660,29 +1929,46 @@ def analyze_student_performance(student, course):
         'overall_avg': grades.aggregate(avg=Avg('value'))['avg'] or 0
     }
 
+
+@login_required
+@teacher_required
+def teacher_student_analysis(request, student_id):
+    student_user = get_object_or_404(User, id=student_id)
+    student_obj = Student.objects.filter(user=student_user).first()
+    if not student_obj:
+        messages.error(request, "У выбранного пользователя отсутствует профиль студента.")
+        return redirect("teacher_dashboard")
+
+    has_relationship = Enrollment.objects.filter(
+        student=student_obj,
+        course__teacher=request.user,
+    ).exists()
+    if not has_relationship:
+        messages.error(request, "Вы можете анализировать только студентов своих курсов.")
+        return redirect("teacher_dashboard")
+
+    report = build_student_performance_report(student_user, teacher=request.user)
+    return render(
+        request,
+        "main/teacher_student_analysis.html",
+        {
+            "student": student_user,
+            "report": report,
+        },
+    )
+
+
 @login_required
 @teacher_required
 def ai_analysis_view(request, student_id, course_id):
-    """Страница с анализом студента через ИИ"""
+    """Совместимость старого URL: редирект на расширенный анализ студента."""
     student = get_object_or_404(User, id=student_id)
     course = get_object_or_404(Course, id=course_id, teacher=request.user)
-    
-    analysis = analyze_student_performance(student, course)
-    progress_records = StudentProgress.objects.filter(student=student, course=course).order_by('-created_at')
-    
-    return render(request, 'main/ai_analysis.html', {
-        'student': student,
-        'course': course,
-        'analysis': analysis,
-        'progress_records': progress_records,
-    })
+    messages.info(request, f"Открыт расширенный анализ по курсу: {course.name}")
+    return redirect("teacher_student_analysis", student_id=student.id)
 
 
 # ===== API: ML прогноз и поиск =====
-
-
-def staff_required(view_func):
-    return user_passes_test(lambda u: u.is_authenticated and u.is_staff)(view_func)
 
 
 @login_required

@@ -27,6 +27,24 @@ class UserRegisterForm(UserCreationForm):
         fields = ['username', 'first_name', 'last_name', 'email', 'role', 'group', 'specialty', 'password1', 'password2']
         labels = {'username': 'Логин'}
 
+    def clean(self):
+        cleaned_data = super().clean()
+        role = cleaned_data.get('role')
+        group = cleaned_data.get('group')
+        specialty = cleaned_data.get('specialty')
+
+        if role == Profile.ROLE_STUDENT:
+            if not group:
+                self.add_error('group', 'Для студента необходимо указать учебную группу.')
+            if not specialty:
+                self.add_error('specialty', 'Для студента необходимо указать специальность.')
+        elif role == Profile.ROLE_TEACHER:
+            # For teachers, these fields must stay empty.
+            cleaned_data['group'] = None
+            cleaned_data['specialty'] = None
+
+        return cleaned_data
+
 # ----------------- Обновление пользователя -----------------
 class UserUpdateForm(forms.ModelForm):
     class Meta:
@@ -40,6 +58,29 @@ class UserUpdateForm(forms.ModelForm):
 
 # ----------------- Обновление профиля -----------------
 class ProfileUpdateForm(forms.ModelForm):
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+
+        role = None
+        if user and hasattr(user, 'profile'):
+            role = user.profile.role
+
+        # Student-specific fields are hidden for teachers.
+        if role == Profile.ROLE_TEACHER:
+            self.fields.pop('group', None)
+            self.fields.pop('specialty', None)
+
+    def save(self, commit=True):
+        profile = super().save(commit=False)
+        role = getattr(profile, 'role', None)
+        if role == Profile.ROLE_TEACHER:
+            profile.group = None
+            profile.specialty = None
+        if commit:
+            profile.save()
+        return profile
+
     class Meta:
         model = Profile
         fields = ['photo', 'bio', 'phone', 'group', 'specialty', 'address', 'iin']

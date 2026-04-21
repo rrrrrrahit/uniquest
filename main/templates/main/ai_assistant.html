@@ -116,6 +116,31 @@
     </div>
   </div>
 {% else %}
+  {% if focus_areas %}
+    <div class="row mb-4">
+      <div class="col-12">
+        <h3 class="mb-3">
+          <i class="fas fa-crosshairs me-2 text-danger"></i>Рекомендуемые зоны проработки:
+        </h3>
+        <div class="row g-3">
+          {% for area in focus_areas %}
+            <div class="col-md-6">
+              <div class="card h-100 border-danger-subtle">
+                <div class="card-body">
+                  <h6 class="mb-1">{{ area.title }}</h6>
+                  <p class="small text-muted mb-2">{{ area.hint }}</p>
+                  <a href="{% url 'ai_assistant' %}?q={{ area.query|urlencode }}" class="btn btn-sm btn-outline-danger">
+                    <i class="fas fa-search me-1"></i>Найти материалы
+                  </a>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
   <!-- Предлагаемые вопросы -->
   {% if suggested_questions %}
     <div class="row mb-4">

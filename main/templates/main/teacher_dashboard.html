@@ -97,6 +97,55 @@
       </div>
     </div>
 
+    <div class="row mt-4 reveal">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Аналитика по студентам</h5>
+            <small class="text-muted">Приоритетно отсортировано по риску</small>
+          </div>
+          <div class="card-body p-0">
+            {% if advisee_students %}
+            <div class="table-responsive">
+              <table class="table mb-0">
+                <thead>
+                  <tr>
+                    <th>Студент</th>
+                    <th>Курсы у преподавателя</th>
+                    <th>Средний балл</th>
+                    <th>Риск-скор</th>
+                    <th>Действие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in advisee_students %}
+                    <tr>
+                      <td>{{ row.student_user.get_full_name|default:row.student_user.username }}</td>
+                      <td>{{ row.courses }}</td>
+                      <td>{{ row.overall_avg|floatformat:1 }}</td>
+                      <td>
+                        <span class="badge {% if row.risk_level == 'critical' %}bg-danger{% elif row.risk_level == 'high' %}bg-warning text-dark{% elif row.risk_level == 'medium' %}bg-info text-dark{% else %}bg-success{% endif %}">
+                          {{ row.risk_score }}
+                        </span>
+                      </td>
+                      <td>
+                        <a href="{% url 'teacher_student_analysis' row.student_user.id %}" class="btn btn-sm btn-outline-primary">
+                          Анализ
+                        </a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+              <div class="p-3 text-muted">Пока нет студентов, закреплённых за вашими курсами.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="row g-4 mt-2 reveal">
       <div class="col-md-6">
         <div class="card h-100">

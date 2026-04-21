@@ -11,6 +11,13 @@
       </div>
       <form method="post">
         {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {% for error in form.non_field_errors %}
+              <div>{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
         <div class="row">
           <div class="col-md-6 mb-3">
             <label for="{{ form.username.id_for_label }}" class="form-label">Имя пользователя</label>
@@ -41,11 +48,19 @@
             {{ form.role }}
             {% if form.role.errors %}<div class="text-danger small">{{ form.role.errors.0 }}</div>{% endif %}
           </div>
-          <div class="col-md-6 mb-3">
+          <div class="col-md-6 mb-3 role-student-field">
             <label for="{{ form.group.id_for_label }}" class="form-label">Учебная группа</label>
             {{ form.group }}
             <small class="form-text text-muted">Только для роли студента</small>
             {% if form.group.errors %}<div class="text-danger small">{{ form.group.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+        <div class="row role-student-field">
+          <div class="col-md-12 mb-3">
+            <label for="{{ form.specialty.id_for_label }}" class="form-label">Специальность</label>
+            {{ form.specialty }}
+            <small class="form-text text-muted">Только для роли студента</small>
+            {% if form.specialty.errors %}<div class="text-danger small">{{ form.specialty.errors.0 }}</div>{% endif %}
           </div>
         </div>
         <div class="row">
@@ -68,4 +83,31 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    const roleSelect = document.getElementById("id_role");
+    const groupSelect = document.getElementById("id_group");
+    const specialtySelect = document.getElementById("id_specialty");
+    const studentFields = document.querySelectorAll(".role-student-field");
+
+    function toggleStudentFields() {
+      const isStudent = roleSelect && roleSelect.value === "student";
+      studentFields.forEach((field) => {
+        field.classList.toggle("d-none", !isStudent);
+      });
+      if (!isStudent) {
+        if (groupSelect) groupSelect.value = "";
+        if (specialtySelect) specialtySelect.value = "";
+      }
+    }
+
+    if (roleSelect) {
+      roleSelect.addEventListener("change", toggleStudentFields);
+      toggleStudentFields();
+    }
+  })();
+</script>
 {% endblock %}

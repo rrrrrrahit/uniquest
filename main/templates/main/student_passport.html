@@ -4,8 +4,8 @@
 {% block content %}
 <div class="row mb-4">
   <div class="col-12">
-    <h1 class="mb-1">Паспорт студента</h1>
-    <p class="text-muted mb-0">Академическая траектория, триггеры риска и персональные индикаторы.</p>
+    <h1 class="mb-1">Академический профиль риска</h1>
+    <p class="text-muted mb-0">Сильные и слабые стороны, угрозы успеваемости и персональные рекомендации по улучшению траектории.</p>
   </div>
 </div>
 
@@ -24,17 +24,36 @@
   </div>
   <div class="col-md-4 mb-3">
     <div class="dashboard-card text-center">
-      <h3 class="mb-0">{{ trajectory|length }}</h3>
-      <p class="text-muted mb-0">Активных дисциплин</p>
+      <h3 class="mb-0">{{ overall_submission_rate|floatformat:1 }}%</h3>
+      <p class="text-muted mb-0">Сдача заданий</p>
     </div>
   </div>
 </div>
 
 <div class="row mb-4">
-  <div class="col-md-8 mb-3">
+  <div class="col-md-3 mb-3">
+    <div class="card h-100">
+      <div class="card-header"><h5 class="mb-0">Уровень риска</h5></div>
+      <div class="card-body text-center">
+        <h2 class="mb-2">
+          {% if overall_risk_level == 'critical' %}
+            <span class="badge bg-danger">Критический</span>
+          {% elif overall_risk_level == 'high' %}
+            <span class="badge bg-warning text-dark">Высокий</span>
+          {% elif overall_risk_level == 'medium' %}
+            <span class="badge bg-info text-dark">Средний</span>
+          {% else %}
+            <span class="badge bg-success">Низкий</span>
+          {% endif %}
+        </h2>
+        <p class="mb-0 text-muted">Интегральный риск-скор: <strong>{{ overall_risk_score }}</strong></p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-9 mb-3">
     <div class="card">
       <div class="card-header">
-        <h5 class="mb-0">Академическая траектория по дисциплинам</h5>
+        <h5 class="mb-0">Траектория по дисциплинам</h5>
       </div>
       <div class="card-body">
         {% if trajectory %}
@@ -45,8 +64,9 @@
                 <th>Дисциплина</th>
                 <th>Средний балл</th>
                 <th>Посещаемость</th>
+                <th>Сдача заданий</th>
                 <th>Тренд</th>
-                <th>Статус</th>
+                <th>Риск</th>
               </tr>
             </thead>
             <tbody>
@@ -55,6 +75,7 @@
                 <td><strong>{{ item.course.name }}</strong></td>
                 <td>{{ item.avg_grade|floatformat:1 }}</td>
                 <td>{{ item.attendance_rate|floatformat:1 }}%</td>
+                <td>{{ item.submission_rate|floatformat:1 }}%</td>
                 <td>
                   {% if item.trend >= 0 %}
                   <span class="text-success">+{{ item.trend|floatformat:1 }}</span>
@@ -63,8 +84,15 @@
                   {% endif %}
                 </td>
                 <td>
-                  <span class="badge {% if item.status == 'stable' %}bg-success{% else %}bg-warning{% endif %}">
-                    {% if item.status == 'stable' %}Стабильно{% else %}Нужна поддержка{% endif %}
+                  <span class="badge
+                    {% if item.risk_level == 'critical' %}bg-danger
+                    {% elif item.risk_level == 'high' %}bg-warning text-dark
+                    {% elif item.risk_level == 'medium' %}bg-info text-dark
+                    {% else %}bg-success{% endif %}">
+                    {% if item.risk_level == 'critical' %}Критический
+                    {% elif item.risk_level == 'high' %}Высокий
+                    {% elif item.risk_level == 'medium' %}Средний
+                    {% else %}Низкий{% endif %}
                   </span>
                 </td>
               </tr>
@@ -78,14 +106,60 @@
       </div>
     </div>
   </div>
+</div>
 
+<div class="row mb-4">
+  <div class="col-md-4 mb-3">
+    <div class="card h-100">
+      <div class="card-header"><h5 class="mb-0">Сильные стороны</h5></div>
+      <div class="card-body">
+        {% if top_strengths %}
+          <ul class="mb-0 ps-3">
+            {% for item in top_strengths %}
+              <li class="mb-2">{{ item.topic }} <span class="text-success">({{ item.avg|floatformat:1 }})</span></li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-muted mb-0">Сильные темы пока не определены.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4 mb-3">
+    <div class="card h-100">
+      <div class="card-header"><h5 class="mb-0">Слабые стороны</h5></div>
+      <div class="card-body">
+        {% if top_weaknesses %}
+          <ul class="mb-0 ps-3">
+            {% for item in top_weaknesses %}
+              <li class="mb-2">{{ item.topic }} <span class="text-danger">({{ item.avg|floatformat:1 }})</span></li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-muted mb-0">Критичных слабых тем не обнаружено.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
   <div class="col-md-4 mb-3">
     <div class="card h-100">
       <div class="card-header">
-        <h5 class="mb-0">Триггеры риска</h5>
+        <h5 class="mb-0">Угрозы и триггеры</h5>
       </div>
       <div class="card-body">
-        {% if risk_triggers %}
+        {% if threats %}
+          {% for threat in threats %}
+          <div class="mb-3 p-2 border rounded bg-light">
+            <strong>{{ threat.course.name }}</strong>
+            <div class="small text-muted mb-1">Риск-скор: {{ threat.risk_score }}</div>
+            <ul class="mb-0 mt-1">
+              {% for indicator in threat.risk_indicators %}
+              <li class="small">{{ indicator }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endfor %}
+        {% elif risk_triggers %}
           {% for trigger in risk_triggers %}
           <div class="mb-3 p-2 border rounded bg-light">
             <strong>{{ trigger.course.name }}</strong>
@@ -103,6 +177,17 @@
         {% endif %}
       </div>
     </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><h5 class="mb-0">Персональные рекомендации</h5></div>
+  <div class="card-body">
+    <ul class="mb-0 ps-3">
+      {% for rec in recommendations %}
+        <li class="mb-2">{{ rec }}</li>
+      {% endfor %}
+    </ul>
   </div>
 </div>
 

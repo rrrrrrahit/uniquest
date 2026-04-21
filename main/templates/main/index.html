@@ -7,16 +7,11 @@
   <div class="row align-items-center g-4">
     <div class="col-lg-7">
       <span class="badge bg-light text-dark mb-3">ATU · Academic Digital Campus</span>
-      <h1 class="display-5 mb-3">Понятная образовательная платформа без лишнего</h1>
-      <p class="lead mb-4">Учебные данные, группы, предметы и аналитика в структурированном виде. Быстро находите главное и принимайте решения по учебному процессу.</p>
+      <h1 class="display-5 mb-3">Единая цифровая платформа академического управления и сопровождения образовательного процесса</h1>
+      <p class="lead mb-4">Платформа UniQuest обеспечивает централизованный доступ к учебным сервисам, прозрачность академических данных и стандартизированное взаимодействие студентов и преподавателей.</p>
       <div class="d-flex flex-wrap gap-2">
-        {% if not user.is_authenticated %}
-          <a href="{% url 'register' %}" class="btn btn-primary btn-lg"><i class="fas fa-user-plus me-2"></i>Регистрация</a>
-          <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg"><i class="fas fa-right-to-bracket me-2"></i>Вход</a>
-        {% else %}
-          <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg"><i class="fas fa-table-columns me-2"></i>Панель</a>
-          <a href="{% url 'groups_list' %}" class="btn btn-outline-light btn-lg"><i class="fas fa-users me-2"></i>Группы</a>
-        {% endif %}
+        <a href="{% url 'login' %}" class="btn btn-primary btn-lg"><i class="fas fa-right-to-bracket me-2"></i>Вход</a>
+        <a href="{% url 'register' %}" class="btn btn-outline-light btn-lg"><i class="fas fa-user-plus me-2"></i>Регистрация</a>
       </div>
     </div>
     <div class="col-lg-5">
@@ -30,34 +25,14 @@
 
 {% block content %}
 <section class="mb-4 reveal">
-  <div class="card border-0 shadow-sm">
+  <div class="card border-0 shadow-sm h-100">
     <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-3 col-6">
-          <div class="kpi-box">
-            <div class="kpi-title">Студентов</div>
-            <div class="kpi-value counter" data-target="{{ total_students }}">0</div>
-          </div>
-        </div>
-        <div class="col-md-3 col-6">
-          <div class="kpi-box">
-            <div class="kpi-title">Групп</div>
-            <div class="kpi-value counter" data-target="{{ total_groups }}">0</div>
-          </div>
-        </div>
-        <div class="col-md-3 col-6">
-          <div class="kpi-box">
-            <div class="kpi-title">Предметов</div>
-            <div class="kpi-value counter" data-target="{{ total_subjects }}">0</div>
-          </div>
-        </div>
-        <div class="col-md-3 col-6">
-          <div class="kpi-box">
-            <div class="kpi-title">Курсов</div>
-            <div class="kpi-value counter" data-target="{{ total_courses }}">0</div>
-          </div>
-        </div>
-      </div>
+      <h4 class="mb-3">О платформе</h4>
+      <p class="mb-0 text-muted">
+        UniQuest предназначена для автоматизации ключевых академических процессов: учета контингента,
+        ведения учебных траекторий, контроля успеваемости, формирования расписания и цифровой поддержки
+        принятия решений. Доступ к персональным разделам предоставляется только после авторизации.
+      </p>
     </div>
   </div>
 </section>
@@ -66,126 +41,46 @@
   <div class="row g-4">
     <div class="col-lg-4">
       <div class="card h-100">
-        <div class="card-header"><h5 class="mb-0">Как устроена платформа</h5></div>
         <div class="card-body">
-          <ol class="mb-0 ps-3">
-            <li class="mb-2">Учебный контур: группы, расписание, дисциплины, оценки.</li>
-            <li class="mb-2">Контур аналитики: KPI, риски, траектория студента.</li>
-            <li>Контур ИИ: рекомендации и прогнозы по успеваемости.</li>
-          </ol>
+          <h5 class="mb-3"><i class="fas fa-user-graduate me-2 text-primary"></i>Для студентов</h5>
+          <ul class="mb-0 ps-3">
+            <li class="mb-2">Личный кабинет и академический профиль.</li>
+            <li class="mb-2">Расписание, оценки, паспорт студента.</li>
+            <li>Персональные рекомендации и учебная аналитика.</li>
+          </ul>
         </div>
       </div>
     </div>
-    <div class="col-lg-8">
+    <div class="col-lg-4">
       <div class="card h-100">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="mb-0">Академические данные</h5>
-          <div class="btn-group btn-group-sm" role="group">
-            <button class="btn btn-outline-primary js-tab-btn active" data-tab="groups-tab" type="button">Группы</button>
-            <button class="btn btn-outline-primary js-tab-btn" data-tab="subjects-tab" type="button">Предметы</button>
-          </div>
-        </div>
         <div class="card-body">
-          <div id="groups-tab" class="js-tab-panel">
-            <div class="table-responsive">
-              <table class="table mb-0">
-                <thead>
-                  <tr><th>Группа</th><th>Год набора</th><th>Студентов</th></tr>
-                </thead>
-                <tbody>
-                  {% for g in top_groups %}
-                  <tr>
-                    <td><a href="{% url 'group_schedule' g.id %}">{{ g.name }}</a></td>
-                    <td>{{ g.year }}</td>
-                    <td>{{ g.student_count }}</td>
-                  </tr>
-                  {% empty %}
-                  <tr><td colspan="3" class="text-muted">Пока нет данных по группам.</td></tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div id="subjects-tab" class="js-tab-panel d-none">
-            <div class="row g-2">
-              {% for s in top_subjects %}
-              <div class="col-md-6">
-                <div class="subject-chip">
-                  <div>
-                    <div class="fw-semibold">{{ s.code }}</div>
-                    <small class="text-muted">{{ s.name_ru|truncatechars:45 }}</small>
-                  </div>
-                  <span class="badge bg-primary">{{ s.course_count }}</span>
-                </div>
-              </div>
-              {% empty %}
-              <p class="text-muted mb-0">Пока нет данных по предметам.</p>
-              {% endfor %}
-            </div>
-          </div>
+          <h5 class="mb-3"><i class="fas fa-chalkboard-teacher me-2 text-primary"></i>Для преподавателей</h5>
+          <ul class="mb-0 ps-3">
+            <li class="mb-2">Курсы, группы и расписание занятий.</li>
+            <li class="mb-2">Ведение оценивания и учебных материалов.</li>
+            <li>Анализ прогресса и рисков студентов.</li>
+          </ul>
         </div>
       </div>
     </div>
-  </div>
-</section>
-
-<section class="mb-5 reveal">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="mb-0">Рекомендуемые дисциплины</h2>
-    <small class="text-muted">Краткая витрина курсов</small>
-  </div>
-  <div class="row g-4">
-    {% for course in courses %}
-    <div class="col-md-4">
+    <div class="col-lg-4">
       <div class="card h-100">
-        <img src="https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?auto=format&fit=crop&w=900&q=80" class="card-img-top" alt="Course image">
         <div class="card-body">
-          <h5 class="card-title">{{ course.name }}</h5>
-          <p class="card-text">{{ course.description|truncatechars:120 }}</p>
-          {% if course.code %}<small class="text-muted d-block mb-2">Код: {{ course.code }}</small>{% endif %}
-          <a href="{% url 'course_detail' course.pk %}" class="btn btn-outline-primary btn-sm">Подробнее</a>
+          <h5 class="mb-3"><i class="fas fa-shield-halved me-2 text-primary"></i>Безопасность доступа</h5>
+          <ul class="mb-0 ps-3">
+            <li class="mb-2">Ролевой доступ к данным и разделам.</li>
+            <li class="mb-2">Разделение интерфейсов по типу пользователя.</li>
+            <li>Защита персональной академической информации.</li>
+          </ul>
         </div>
       </div>
     </div>
-    {% empty %}
-    <div class="col-12">
-      <div class="alert alert-info mb-0">Курсы пока не добавлены.</div>
-    </div>
-    {% endfor %}
   </div>
 </section>
-
-{% if not user.is_authenticated %}
-<section class="text-center">
-  <div class="card">
-    <div class="card-body py-5">
-      <h3 class="mb-3">Демо-доступ для презентации</h3>
-      <div class="d-flex flex-wrap gap-2 justify-content-center">
-        <a href="{% url 'create_test_student' %}" class="btn btn-outline-info"><i class="fas fa-user-graduate me-1"></i>Тестовый студент</a>
-        <a href="{% url 'create_test_teacher' %}" class="btn btn-outline-warning"><i class="fas fa-user-tie me-1"></i>Тестовый преподаватель</a>
-      </div>
-    </div>
-  </div>
-</section>
-{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-  document.querySelectorAll(".counter").forEach((el) => {
-    const target = parseInt(el.dataset.target || "0", 10);
-    let value = 0;
-    const step = Math.max(1, Math.floor(target / 30));
-    const timer = setInterval(() => {
-      value += step;
-      if (value >= target) {
-        value = target;
-        clearInterval(timer);
-      }
-      el.textContent = value;
-    }, 25);
-  });
-
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting) entry.target.classList.add("show");
@@ -193,15 +88,5 @@
   }, { threshold: 0.12 });
 
   document.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
-
-  document.querySelectorAll(".js-tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.tab;
-      document.querySelectorAll(".js-tab-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      document.querySelectorAll(".js-tab-panel").forEach((panel) => panel.classList.add("d-none"));
-      document.getElementById(tab).classList.remove("d-none");
-    });
-  });
 </script>
 {% endblock %}

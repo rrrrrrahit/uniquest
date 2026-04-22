@@ -825,12 +825,30 @@ def staff_required(view_func):
 
 
 def _compute_grade_trend(values):
-    if len(values) < 4:
+    if len(values) < 3:
         return 0.0
-    window = min(3, max(1, len(values) // 2))
-    first_avg = sum(values[:window]) / window
-    last_avg = sum(values[-window:]) / window
-    return last_avg - first_avg
+    # Линейный тренд: итоговое изменение балла по траектории.
+    n = len(values)
+    x_mean = (n - 1) / 2
+    y_mean = sum(values) / n
+    numerator = 0.0
+    denominator = 0.0
+    for idx, value in enumerate(values):
+        dx = idx - x_mean
+        numerator += dx * (value - y_mean)
+        denominator += dx * dx
+    if denominator == 0:
+        return 0.0
+    slope = numerator / denominator
+    return slope * (n - 1)
+
+
+def _compute_stddev(values):
+    if len(values) < 2:
+        return 0.0
+    mean_value = sum(values) / len(values)
+    variance = sum((value - mean_value) ** 2 for value in values) / len(values)
+    return variance ** 0.5
 
 
 def build_student_performance_report(student_user, teacher=None):
@@ -861,31 +879,68 @@ def build_student_performance_report(student_user, teacher=None):
     weak_topics = defaultdict(list)
 
     all_grade_values = []
+    weighted_grade_sum = 0.0
+    weighted_grade_count = 0
     total_attendance_records = 0
     total_attended = 0
     total_assignments = 0
     total_submissions = 0
+    weighted_risk_sum = 0.0
+    weight_total = 0.0
 
     for enrollment in enrollments:
         course = enrollment.course
-        grades_qs = Grade.objects.filter(student=student_user, course=course).order_by("date")
-        grade_values = [float(g.value) for g in grades_qs]
+        grades = list(
+            Grade.objects.filter(student=student_user, course=course).order_by("date")
+        )
+        grade_values = [float(g.value) for g in grades]
         avg_grade = (sum(grade_values) / len(grade_values)) if grade_values else 0.0
+        recent_slice = grade_values[-3:] if grade_values else []
+        recent_avg = (sum(recent_slice) / len(recent_slice)) if recent_slice else avg_grade
         trend = _compute_grade_trend(grade_values)
+        grade_std = _compute_stddev(grade_values)
+        consistency_index = max(0.0, 100.0 - min(100.0, grade_std * 6.0))
         all_grade_values.extend(grade_values)
+        weighted_grade_sum += sum(grade_values) * max(1, course.credits)
+        weighted_grade_count += len(grade_values) * max(1, course.credits)
 
-        attendance_qs = Attendance.objects.filter(enrollment=enrollment)
+        attendance_qs = Attendance.objects.filter(enrollment=enrollment).order_by("date")
         att_total = attendance_qs.count()
         att_present = attendance_qs.filter(present=True).count()
         attendance_rate = (att_present * 100 / att_total) if att_total else 0.0
+        attendance_values = [1 if row.present else 0 for row in attendance_qs]
+        recent_att_window = attendance_values[-4:] if attendance_values else []
+        prev_att_window = attendance_values[:-4] if len(attendance_values) > 4 else []
+        recent_attendance = (
+            sum(recent_att_window) * 100 / len(recent_att_window)
+            if recent_att_window
+            else attendance_rate
+        )
+        prev_attendance = (
+            sum(prev_att_window) * 100 / len(prev_att_window)
+            if prev_att_window
+            else attendance_rate
+        )
+        attendance_trend = recent_attendance - prev_attendance
         total_attendance_records += att_total
         total_attended += att_present
 
-        assignments_total = Assignment.objects.filter(course=course).count()
-        submissions_total = Submission.objects.filter(
+        assignments_due_qs = Assignment.objects.filter(course=course, due_date__lte=timezone.now())
+        assignments_total = assignments_due_qs.count()
+        if assignments_total == 0:
+            assignments_total = Assignment.objects.filter(course=course).count()
+
+        submissions_qs = Submission.objects.filter(
             student=student_user, assignment__course=course
-        ).count()
+        ).select_related("assignment")
+        submissions_total = submissions_qs.count()
         submission_rate = (submissions_total * 100 / assignments_total) if assignments_total else 100.0
+        on_time_submissions = sum(
+            1
+            for submission in submissions_qs
+            if submission.assignment and submission.submitted_at <= submission.assignment.due_date
+        )
+        on_time_rate = (on_time_submissions * 100 / submissions_total) if submissions_total else 100.0
         total_assignments += assignments_total
         total_submissions += submissions_total
 
@@ -902,52 +957,116 @@ def build_student_performance_report(student_user, teacher=None):
         for row in topic_stats:
             topic_name = row["topic"]
             topic_avg = float(row["avg_topic"] or 0)
-            if topic_avg >= 85:
+            topic_items = int(row.get("topic_items") or 0)
+            if topic_avg >= 82 and topic_items >= 2:
                 strong_topics[topic_name].append(topic_avg)
                 course_strengths.append({"topic": topic_name, "avg": topic_avg})
-            elif topic_avg <= 70:
+            elif topic_avg <= 72 and topic_items >= 2:
                 weak_topics[topic_name].append(topic_avg)
                 course_weaknesses.append({"topic": topic_name, "avg": topic_avg})
 
-        risk_score = 0
+        risk_score = 0.0
         indicators = []
+        success_signals = []
+
         if avg_grade < 60:
-            risk_score += 45
+            risk_score += 34
             indicators.append("Критически низкий средний балл")
         elif avg_grade < 70:
-            risk_score += 25
-            indicators.append("Средний балл ниже целевого")
+            risk_score += 22
+            indicators.append("Средний балл ниже академической нормы")
+        elif avg_grade < 80:
+            risk_score += 10
 
-        if attendance_rate < 65:
-            risk_score += 35
-            indicators.append("Низкая посещаемость (САПАР)")
-        elif attendance_rate < 80:
-            risk_score += 20
-            indicators.append("Посещаемость ниже рекомендуемой")
+        if recent_avg + 3 < avg_grade:
+            risk_score += 12
+            indicators.append("Последние результаты ниже базовой траектории")
+        elif recent_avg > avg_grade + 3:
+            success_signals.append("Наблюдается ускорение академического прогресса")
 
-        if trend < -8:
-            risk_score += 25
-            indicators.append("Сильный негативный тренд оценок")
-        elif trend < -4:
-            risk_score += 15
-            indicators.append("Отрицательная динамика успеваемости")
+        if attendance_rate < 60:
+            risk_score += 28
+            indicators.append("Критически низкая посещаемость (САПАР)")
+        elif attendance_rate < 75:
+            risk_score += 17
+            indicators.append("Посещаемость ниже целевого уровня")
+        elif attendance_rate < 85:
+            risk_score += 7
+        else:
+            success_signals.append("Стабильная высокая посещаемость")
+
+        if attendance_trend < -12:
+            risk_score += 10
+            indicators.append("Снижение посещаемости в последние недели")
 
         if submission_rate < 60:
-            risk_score += 20
+            risk_score += 22
             indicators.append("Низкая доля сданных заданий")
         elif submission_rate < 80:
-            risk_score += 10
+            risk_score += 12
             indicators.append("Нестабильная сдача заданий")
+        elif submission_rate >= 95:
+            success_signals.append("Почти полное выполнение учебных заданий")
 
-        if not grade_values:
-            risk_score += 10
-            indicators.append("Недостаточно оценок для устойчивой траектории")
+        if on_time_rate < 60:
+            risk_score += 12
+            indicators.append("Большая часть работ сдаётся с опозданием")
+        elif on_time_rate < 80:
+            risk_score += 6
+            indicators.append("Требуется повышение дисциплины дедлайнов")
 
-        if risk_score >= 70:
+        if trend < -12:
+            risk_score += 24
+            indicators.append("Сильный нисходящий тренд оценок")
+        elif trend < -6:
+            risk_score += 14
+            indicators.append("Негативный тренд оценок")
+        elif trend < -3:
+            risk_score += 7
+        elif trend > 6:
+            success_signals.append("Выраженный положительный тренд оценок")
+
+        if grade_std > 15:
+            risk_score += 14
+            indicators.append("Высокая нестабильность результатов")
+        elif grade_std > 10:
+            risk_score += 8
+            indicators.append("Нестабильность оценок между контрольными точками")
+        elif len(grade_values) >= 5:
+            success_signals.append("Стабильная успеваемость без резких провалов")
+
+        if len(grade_values) < 4:
+            risk_score += 8
+            indicators.append("Недостаточно оценок для уверенного прогноза")
+        if att_total == 0:
+            risk_score += 6
+            indicators.append("Недостаточно данных посещаемости")
+
+        if (
+            avg_grade >= 88
+            and attendance_rate >= 90
+            and submission_rate >= 90
+            and on_time_rate >= 85
+            and trend >= 2
+        ):
+            risk_score -= 12
+            success_signals.append("Комплексно сильная академическая траектория")
+
+        risk_score = max(0, min(100, int(round(risk_score))))
+        data_confidence = min(
+            100.0,
+            (
+                min(len(grade_values), 8) / 8 * 40
+                + min(att_total, 10) / 10 * 30
+                + min(assignments_total, 8) / 8 * 30
+            ),
+        )
+
+        if risk_score >= 75:
             risk_level = "critical"
-        elif risk_score >= 45:
+        elif risk_score >= 50:
             risk_level = "high"
-        elif risk_score >= 20:
+        elif risk_score >= 25:
             risk_level = "medium"
         else:
             risk_level = "low"
@@ -961,27 +1080,40 @@ def build_student_performance_report(student_user, teacher=None):
                 "avg_grade": avg_grade,
                 "attendance_rate": attendance_rate,
                 "submission_rate": submission_rate,
+                "on_time_rate": on_time_rate,
                 "trend": trend,
+                "recent_avg": recent_avg,
+                "consistency_index": consistency_index,
+                "attendance_trend": attendance_trend,
                 "risk_score": risk_score,
                 "risk_level": risk_level,
                 "risk_indicators": indicators,
+                "success_signals": success_signals,
+                "data_confidence": data_confidence,
                 "strengths": course_strengths[:3],
                 "weaknesses": course_weaknesses[:3],
             }
         )
+        course_weight = max(1.0, float(course.credits or 1))
+        weighted_risk_sum += risk_score * course_weight
+        weight_total += course_weight
 
     course_reports.sort(key=lambda item: item["risk_score"], reverse=True)
 
-    overall_avg = (sum(all_grade_values) / len(all_grade_values)) if all_grade_values else 0.0
+    overall_avg = (
+        weighted_grade_sum / weighted_grade_count
+        if weighted_grade_count
+        else ((sum(all_grade_values) / len(all_grade_values)) if all_grade_values else 0.0)
+    )
     overall_attendance = (total_attended * 100 / total_attendance_records) if total_attendance_records else 0.0
     overall_submission_rate = (total_submissions * 100 / total_assignments) if total_assignments else 100.0
-    overall_risk_score = int(sum(item["risk_score"] for item in course_reports) / len(course_reports)) if course_reports else 0
+    overall_risk_score = int(weighted_risk_sum / weight_total) if weight_total else 0
 
-    if overall_risk_score >= 70:
+    if overall_risk_score >= 75:
         overall_risk_level = "critical"
-    elif overall_risk_score >= 45:
+    elif overall_risk_score >= 50:
         overall_risk_level = "high"
-    elif overall_risk_score >= 20:
+    elif overall_risk_score >= 25:
         overall_risk_level = "medium"
     else:
         overall_risk_level = "low"
@@ -1002,6 +1134,17 @@ def build_student_performance_report(student_user, teacher=None):
         recommendations.append("Повысить посещаемость до уровня не ниже 80%.")
     if overall_submission_rate < 85:
         recommendations.append("Стабилизировать сдачу заданий и исключить пропуски дедлайнов.")
+    high_risk_courses = [row for row in course_reports if row["risk_level"] in ("critical", "high")]
+    if high_risk_courses:
+        priorities = ", ".join([row["course"].name for row in high_risk_courses[:2]])
+        recommendations.append(
+            f"Сфокусировать индивидуальную поддержку на дисциплинах: {priorities}."
+        )
+    unstable_courses = [row for row in course_reports if row["consistency_index"] < 45]
+    if unstable_courses:
+        recommendations.append(
+            "Снизить разброс результатов: добавить еженедельные мини-контроли и короткие консультации."
+        )
     if top_weaknesses:
         weak_topics_list = ", ".join([row["topic"] for row in top_weaknesses[:3]])
         recommendations.append(f"Приоритетно проработать темы: {weak_topics_list}.")

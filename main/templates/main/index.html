@@ -5,18 +5,26 @@
 {% block hero %}
 <div class="py-2">
   <div class="row align-items-center g-4">
-    <div class="col-lg-7">
+    <div class="col-lg-6">
       <span class="badge bg-light text-dark mb-3">ATU · Academic Digital Campus</span>
-      <h1 class="display-5 mb-3">Единая цифровая платформа академического управления и сопровождения образовательного процесса</h1>
-      <p class="lead mb-4">Платформа UniQuest обеспечивает централизованный доступ к учебным сервисам, прозрачность академических данных и стандартизированное взаимодействие студентов и преподавателей.</p>
-      <div class="d-flex flex-wrap gap-2">
-        <a href="{% url 'login' %}" class="btn btn-primary btn-lg"><i class="fas fa-right-to-bracket me-2"></i>Вход</a>
-        <a href="{% url 'register' %}" class="btn btn-outline-light btn-lg"><i class="fas fa-user-plus me-2"></i>Регистрация</a>
+      <h1 class="display-5 mb-3">Цифровая академическая среда UniQuest</h1>
+      <p class="lead mb-4">Официальная платформа для учебных сервисов, расписания, оценивания и прозрачного взаимодействия студентов и преподавателей.</p>
+      <div class="landing-actions d-flex flex-nowrap gap-2">
+        <a href="{% url 'login' %}" class="btn btn-primary btn-compact"><i class="fas fa-right-to-bracket me-2"></i>Вход</a>
+        <a href="{% url 'register' %}" class="btn btn-outline-light btn-compact"><i class="fas fa-user-plus me-2"></i>Регистрация</a>
       </div>
     </div>
-    <div class="col-lg-5">
-      <div class="hero-media card border-0">
-        <img src="https://images.unsplash.com/photo-1452860606245-08befc0ff44b?auto=format&fit=crop&w=1200&q=80" class="img-fluid rounded" alt="University lecture hall">
+    <div class="col-lg-6">
+      <div class="hero-gallery">
+        <div class="hero-gallery-item hero-gallery-item-lg" data-float>
+          <img src="https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1200&q=80" class="img-fluid rounded" alt="University campus architecture">
+        </div>
+        <div class="hero-gallery-item" data-float>
+          <img src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=900&q=80" class="img-fluid rounded" alt="Students walking near university building">
+        </div>
+        <div class="hero-gallery-item" data-float>
+          <img src="https://images.unsplash.com/photo-1513258496099-48168024aec0?auto=format&fit=crop&w=900&q=80" class="img-fluid rounded" alt="University library and study space">
+        </div>
       </div>
     </div>
   </div>
@@ -88,5 +96,28 @@
   }, { threshold: 0.12 });
 
   document.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const galleryItems = document.querySelectorAll(".hero-gallery-item");
+
+  if (!reduceMotion && galleryItems.length) {
+    let highlighted = 0;
+    galleryItems[highlighted].classList.add("is-active");
+
+    setInterval(() => {
+      galleryItems[highlighted].classList.remove("is-active");
+      highlighted = (highlighted + 1) % galleryItems.length;
+      galleryItems[highlighted].classList.add("is-active");
+    }, 2500);
+
+    document.addEventListener("mousemove", (event) => {
+      const xOffset = (event.clientX / window.innerWidth - 0.5) * 8;
+      const yOffset = (event.clientY / window.innerHeight - 0.5) * 8;
+      document.querySelectorAll("[data-float]").forEach((item, index) => {
+        const depth = (index + 1) * 0.6;
+        item.style.transform = `translate(${xOffset * depth}px, ${yOffset * depth}px)`;
+      });
+    });
+  }
 </script>
 {% endblock %}

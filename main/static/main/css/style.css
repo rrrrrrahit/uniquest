@@ -209,6 +209,16 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.btn-compact {
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  min-width: 135px;
+}
+
+.landing-actions {
+  align-items: center;
+}
+
 /* Cards - Clean Professional */
 .card {
   background: var(--bg-primary);
@@ -562,6 +572,28 @@ a:hover {
   .stats-card h3 {
     font-size: 2rem;
   }
+
+  .landing-actions {
+    flex-wrap: wrap !important;
+  }
+
+  .btn-compact {
+    min-width: 120px;
+  }
+
+  .hero-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-gallery-item-lg {
+    grid-row: auto;
+  }
+
+  .hero-gallery-item img,
+  .hero-gallery-item-lg img {
+    min-height: 170px;
+    height: 170px;
+  }
 }
 
 /* Loading Spinner */
@@ -629,6 +661,40 @@ a:hover {
   height: 250px;
   width: 100%;
   object-fit: cover;
+}
+
+.hero-gallery {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 0.75rem;
+}
+
+.hero-gallery-item {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  transition: transform 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+  box-shadow: 0 12px 24px rgba(38, 28, 21, 0.25);
+}
+
+.hero-gallery-item img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+
+.hero-gallery-item-lg {
+  grid-row: span 2;
+}
+
+.hero-gallery-item-lg img {
+  height: 100%;
+  min-height: 310px;
+}
+
+.hero-gallery-item.is-active {
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 18px 32px rgba(38, 28, 21, 0.35);
 }
 
 .list-group-item {

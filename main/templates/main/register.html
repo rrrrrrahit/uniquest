@@ -52,6 +52,9 @@
             <label for="{{ form.group.id_for_label }}" class="form-label">Учебная группа</label>
             {{ form.group }}
             <small class="form-text text-muted">Только для роли студента</small>
+            {% if not form.fields.group.queryset %}
+              <div class="text-warning small mt-1">Группы пока не созданы администратором.</div>
+            {% endif %}
             {% if form.group.errors %}<div class="text-danger small">{{ form.group.errors.0 }}</div>{% endif %}
           </div>
         </div>
@@ -60,6 +63,9 @@
             <label for="{{ form.specialty.id_for_label }}" class="form-label">Специальность</label>
             {{ form.specialty }}
             <small class="form-text text-muted">Только для роли студента</small>
+            {% if not form.fields.specialty.queryset %}
+              <div class="text-warning small mt-1">Специальности пока не созданы администратором.</div>
+            {% endif %}
             {% if form.specialty.errors %}<div class="text-danger small">{{ form.specialty.errors.0 }}</div>{% endif %}
           </div>
         </div>

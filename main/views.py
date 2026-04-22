@@ -732,17 +732,24 @@ def register_view(request):
         if form.is_valid():
             try:
                 user = form.save()
-                profile = Profile.objects.create(
+                role = form.cleaned_data['role']
+                group = form.cleaned_data.get('group')
+                specialty = form.cleaned_data.get('specialty')
+
+                # Профиль может быть создан сигналом автоматически: обновляем существующий.
+                Profile.objects.update_or_create(
                     user=user,
-                    role=form.cleaned_data['role'],
-                    group=form.cleaned_data.get('group'),
-                    specialty=form.cleaned_data.get('specialty'),
-                    enrollment_date=timezone.now().date()
-                    if form.cleaned_data['role'] == Profile.ROLE_STUDENT
-                    else None,
+                    defaults={
+                        'role': role,
+                        'group': group if role == Profile.ROLE_STUDENT else None,
+                        'specialty': specialty if role == Profile.ROLE_STUDENT else None,
+                        'enrollment_date': timezone.now().date()
+                        if role == Profile.ROLE_STUDENT
+                        else None,
+                    },
                 )
                 # Создаём сущность Student для студентов, чтобы связать с академическими моделями
-                if form.cleaned_data['role'] == Profile.ROLE_STUDENT:
+                if role == Profile.ROLE_STUDENT:
                     # Генерируем уникальный email если он уже существует
                     student_email = user.email or f"{user.username}@example.com"
                     email_base = student_email.split('@')[0]
@@ -758,11 +765,13 @@ def register_view(request):
                             "first_name": user.first_name or user.username,
                             "last_name": user.last_name or "",
                             "email": student_email,
-                            "group": form.cleaned_data.get('group'),
+                            "group": group,
                         },
                     )
                 login(request, user)
                 messages.success(request, 'Регистрация успешна. Добро пожаловать!')
+                if role == Profile.ROLE_TEACHER:
+                    return redirect('teacher_dashboard')
                 return redirect('dashboard')
             except Exception as e:
                 messages.error(request, f'Ошибка при регистрации: {str(e)}')

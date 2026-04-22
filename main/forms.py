@@ -22,6 +22,13 @@ class UserRegisterForm(UserCreationForm):
         help_text='Выберите специальность (для студентов)'
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['group'].queryset = Group.objects.all().order_by('-year', 'name')
+        self.fields['specialty'].queryset = Specialty.objects.all().order_by('code', 'name_ru')
+        self.fields['group'].empty_label = '---------'
+        self.fields['specialty'].empty_label = '---------'
+
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'role', 'group', 'specialty', 'password1', 'password2']
@@ -34,6 +41,10 @@ class UserRegisterForm(UserCreationForm):
         specialty = cleaned_data.get('specialty')
 
         if role == Profile.ROLE_STUDENT:
+            if not Group.objects.exists():
+                self.add_error('group', 'В системе пока нет учебных групп. Обратитесь к администратору.')
+            if not Specialty.objects.exists():
+                self.add_error('specialty', 'В системе пока нет специальностей. Обратитесь к администратору.')
             if not group:
                 self.add_error('group', 'Для студента необходимо указать учебную группу.')
             if not specialty:

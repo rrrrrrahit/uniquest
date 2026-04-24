@@ -1,6 +1,6 @@
 {% extends 'main/base.html' %}
 {% load static %}
-{% block title %}ИИ-помощник — UniQuest{% endblock %}
+{% block title %}База знаний — UniQuest{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
@@ -10,7 +10,7 @@
         <i class="fas fa-robot fa-3x text-primary"></i>
       </div>
       <div>
-        <h1 class="mb-1">ИИ-помощник</h1>
+        <h1 class="mb-1">База знаний</h1>
         <p class="text-muted mb-0">
           Умный поиск по учебным материалам
           {% if specialty %}
@@ -91,6 +91,11 @@
                       <a href="{% url 'lecture_detail' result.lecture.id %}" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-eye me-1"></i>Читать полностью
                       </a>
+                      {% if result.lecture.lecture_file %}
+                        <a href="{% url 'download_lecture_file' result.lecture.id %}" class="btn btn-sm btn-outline-success ms-1">
+                          <i class="fas fa-download me-1"></i>Скачать файл
+                        </a>
+                      {% endif %}
                     {% elif result.url %}
                       <a href="{{ result.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-external-link-alt me-1"></i>Открыть ссылку
@@ -198,7 +203,7 @@
       <div class="card bg-light">
         <div class="card-body">
           <h5 class="card-title">
-            <i class="fas fa-info-circle me-2"></i>Как работает ИИ-помощник?
+            <i class="fas fa-info-circle me-2"></i>Как работает база знаний?
           </h5>
           <div class="row">
             <div class="col-md-4 mb-3">

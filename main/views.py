@@ -2,10 +2,11 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse, Http404
 from functools import wraps
 from collections import defaultdict
 from datetime import timedelta
+from pathlib import Path
 from .forms import (
     UserRegisterForm,
     UserUpdateForm,
@@ -38,15 +39,39 @@ from django.utils import timezone
 from datetime import timedelta
 import json
 
-from .search_service import semantic_search
+from .search_service import semantic_search, build_lecture_snippet
+
+# Централизованный редирект пользователя по роли.
+def _role_home(user):
+    profile = getattr(user, "profile", None)
+    if profile and profile.role == Profile.ROLE_TEACHER:
+        return "teacher_dashboard"
+    return "dashboard"
+
+
+def _ensure_registration_reference_data():
+    """Гарантирует, что в форме регистрации есть группы и специальность."""
+    if not Group.objects.exists():
+        Group.objects.bulk_create(
+            [
+                Group(name="ИС-Р", year=timezone.now().year),
+                Group(name="ИС-К", year=timezone.now().year),
+                Group(name="ВТиПО-Р", year=timezone.now().year),
+            ],
+            ignore_conflicts=True,
+        )
+    if not Specialty.objects.exists():
+        Specialty.objects.create(
+            code="6B061",
+            name_kk="Ақпараттық-коммуникациялық технологиялар",
+            name_ru="Информационно-коммуникационные технологии",
+            description="Базовая специальность для первичной регистрации студентов.",
+        )
 
 # ===== Главная и авторизация =====
 def index(request):
     if request.user.is_authenticated:
-        profile = getattr(request.user, 'profile', None)
-        if profile and profile.role == Profile.ROLE_TEACHER:
-            return redirect('teacher_dashboard')
-        return redirect('dashboard')
+        return redirect(_role_home(request.user))
 
     return render(request, 'main/index.html')
 
@@ -725,7 +750,9 @@ def create_test_teacher_view(request):
 
 def register_view(request):
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect(_role_home(request.user))
+
+    _ensure_registration_reference_data()
 
     if request.method == 'POST':
         form = UserRegisterForm(request.POST)
@@ -770,9 +797,7 @@ def register_view(request):
                     )
                 login(request, user)
                 messages.success(request, 'Регистрация успешна. Добро пожаловать!')
-                if role == Profile.ROLE_TEACHER:
-                    return redirect('teacher_dashboard')
-                return redirect('dashboard')
+                return redirect(_role_home(user))
             except Exception as e:
                 messages.error(request, f'Ошибка при регистрации: {str(e)}')
                 # Логируем ошибку для отладки
@@ -785,7 +810,7 @@ def register_view(request):
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect(_role_home(request.user))
 
     if request.method == 'POST':
         form = AuthenticationForm(request=request, data=request.POST)
@@ -793,7 +818,7 @@ def login_view(request):
             user = form.get_user()
             login(request, user)
             messages.success(request, 'Вы успешно вошли.')
-            return redirect('dashboard')
+            return redirect(_role_home(user))
         else:
             messages.error(request, 'Ошибка входа. Проверьте логин и пароль.')
     else:
@@ -995,7 +1020,7 @@ def build_student_performance_report(student_user, teacher=None):
 
         if attendance_rate < 60:
             risk_score += 28
-            indicators.append("Критически низкая посещаемость (САПАР)")
+            indicators.append("Критически низкая посещаемость (САПА)")
         elif attendance_rate < 75:
             risk_score += 17
             indicators.append("Посещаемость ниже целевого уровня")
@@ -1313,6 +1338,12 @@ def dashboard(request):
         course__in=courses,
         due_date__gte=timezone.now()
     ).order_by('due_date')[:5]
+    recent_documents = (
+        Lecture.objects.filter(course__in=courses, lecture_file__isnull=False)
+        .exclude(lecture_file="")
+        .select_related("course")
+        .order_by("-created_at")[:10]
+    )
 
     return render(request, 'main/dashboard.html', {
         'courses': courses,
@@ -1320,6 +1351,7 @@ def dashboard(request):
         'avg_score': avg_score,
         'recent_grades': recent_grades,
         'upcoming_assignments': upcoming_assignments,
+        'recent_documents': recent_documents,
         'is_admin_dashboard': False,
     })
 
@@ -1382,6 +1414,7 @@ def course_detail(request, pk):
     assignments = Assignment.objects.filter(course=course)
     recommendations = Recommendation.objects.filter(submission__assignment__in=assignments)
     schedule = ScheduleEntry.objects.filter(course=course).order_by('weekday', 'start_time')
+    lectures = Lecture.objects.filter(course=course).order_by("-created_at")
     
     # Получаем оценки для текущего пользователя (если студент) или все (если преподаватель)
     if user_profile and user_profile.role == Profile.ROLE_TEACHER:
@@ -1396,6 +1429,7 @@ def course_detail(request, pk):
         'recommendations': recommendations,
         'schedule': schedule,
         'grades': grades,
+        'lectures': lectures,
     })
 
 @login_required
@@ -1559,12 +1593,12 @@ def ai_assistant(request):
                         fallback_qs = fallback_qs.filter(course__in=student_courses)
                     fallback_qs = fallback_qs[:10]
                     for lecture in fallback_qs:
-                        snippet_source = lecture.content_text or ""
+                        snippet_source = build_lecture_snippet(lecture, query, max_len=240)
                         search_results.append(
                             {
                                 "id": lecture.id,
                                 "title": lecture.title,
-                                "snippet": snippet_source[:240] + ("..." if len(snippet_source) > 240 else ""),
+                                "snippet": snippet_source,
                                 "score": 0.0,
                                 "lecture": lecture,
                             }
@@ -1917,6 +1951,46 @@ def lecture_detail(request, pk: int):
 
 
 @login_required
+def download_lecture_file(request, pk: int):
+    lecture = get_object_or_404(Lecture.objects.select_related("course"), pk=pk)
+
+    user_profile = getattr(request.user, "profile", None)
+    if request.user.is_staff and not user_profile:
+        has_access = True
+    elif user_profile and user_profile.role == Profile.ROLE_TEACHER:
+        has_access = lecture.course.teacher_id == request.user.id
+    else:
+        has_access = Enrollment.objects.filter(
+            student__user=request.user,
+            course=lecture.course,
+        ).exists()
+
+    if not has_access:
+        messages.error(request, "У вас нет доступа к этому материалу.")
+        return redirect("dashboard")
+
+    if not lecture.lecture_file:
+        messages.error(request, "Файл лекции не найден.")
+        return redirect("course_detail", pk=lecture.course_id)
+
+    file_path = Path(lecture.lecture_file.path)
+    if not file_path.exists():
+        raise Http404("Файл не найден на сервере.")
+
+    if file_path.stat().st_size == 0:
+        messages.error(request, "Файл повреждён или пустой. Попросите преподавателя загрузить его заново.")
+        return redirect("course_detail", pk=lecture.course_id)
+
+    response = FileResponse(
+        open(file_path, "rb"),
+        as_attachment=True,
+        filename=file_path.name,
+    )
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@login_required
 @staff_required
 def demo_page(request):
     # Несколько случайных студентов и курсов для демонстрации
@@ -1967,7 +2041,7 @@ def teacher_dashboard(request):
                     messages.success(request, "Оценка успешно добавлена.")
                     return redirect("teacher_dashboard")
         elif action == "add_resource":
-            lecture_form = LectureCreateForm(request.POST, teacher=user)
+            lecture_form = LectureCreateForm(request.POST, request.FILES, teacher=user)
             if lecture_form.is_valid():
                 lecture_form.save()
                 messages.success(request, "Лекция/ресурс добавлены.")
@@ -2014,6 +2088,12 @@ def teacher_dashboard(request):
             }
         )
     advisee_students.sort(key=lambda item: item["risk_score"], reverse=True)
+    published_lectures = (
+        Lecture.objects.filter(course__teacher=user, lecture_file__isnull=False)
+        .exclude(lecture_file="")
+        .select_related("course")
+        .order_by("-created_at")[:12]
+    )
     
     return render(request, 'main/teacher_dashboard.html', {
         'courses': courses,
@@ -2024,13 +2104,29 @@ def teacher_dashboard(request):
         'grade_form': grade_form,
         'lecture_form': lecture_form,
         'advisee_students': advisee_students[:30],
+        'published_lectures': published_lectures,
     })
 
 @login_required
 @teacher_required
 def teacher_courses(request):
-    courses = Course.objects.filter(teacher=request.user)
-    return render(request, 'main/teacher_courses.html', {'courses': courses})
+    courses = Course.objects.filter(teacher=request.user).prefetch_related("lectures")
+    course_cards = []
+    for course in courses:
+        materials = [
+            lecture
+            for lecture in course.lectures.all()
+            if getattr(lecture, "lecture_file", None)
+        ]
+        latest_material = materials[0] if materials else None
+        course_cards.append(
+            {
+                "course": course,
+                "materials_count": len(materials),
+                "latest_material": latest_material,
+            }
+        )
+    return render(request, 'main/teacher_courses.html', {'courses': courses, 'course_cards': course_cards})
 
 @login_required
 @teacher_required

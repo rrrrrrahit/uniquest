@@ -153,7 +153,7 @@
             <h5 class="mb-0">Добавить оценку студенту</h5>
           </div>
           <div class="card-body">
-            <form method="post">
+            <form method="post" enctype="multipart/form-data">
               {% csrf_token %}
               <input type="hidden" name="action" value="add_grade">
               {% for field in grade_form %}
@@ -185,7 +185,7 @@
             <h5 class="mb-0">Добавить лекцию / ресурс</h5>
           </div>
           <div class="card-body">
-            <form method="post">
+            <form method="post" enctype="multipart/form-data">
               {% csrf_token %}
               <input type="hidden" name="action" value="add_resource">
               {% for field in lecture_form %}
@@ -307,6 +307,50 @@
               </div>
             </div>
           {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if published_lectures %}
+<div class="row mt-4 reveal">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-file-upload me-2"></i>Опубликованные материалы</h5>
+        <small class="text-muted">Последние загруженные файлы лекций</small>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Курс</th>
+                <th>Материал</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for lecture in published_lectures %}
+                <tr>
+                  <td>{{ lecture.created_at|date:"d.m.Y H:i" }}</td>
+                  <td>{{ lecture.course.name }}</td>
+                  <td>{{ lecture.title }}</td>
+                  <td>
+                    <a href="{% url 'download_lecture_file' lecture.id %}" class="btn btn-sm btn-outline-primary">
+                      <i class="fas fa-download me-1"></i>Скачать
+                    </a>
+                    <a href="{% url 'course_detail' lecture.course.id %}" class="btn btn-sm btn-outline-secondary ms-1">
+                      К курсу
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

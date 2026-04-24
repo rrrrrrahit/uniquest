@@ -29,6 +29,30 @@
     </div>
   </div>
   <div class="col-md-4 reveal">
+    <div class="card mb-4">
+      <div class="card-header"><h5 class="mb-0">Материалы курса</h5></div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for lecture in lectures %}
+            <li class="list-group-item">
+              <div class="fw-semibold">{{ lecture.title }}</div>
+              <div class="small text-muted mb-2">{{ lecture.created_at|date:"d.m.Y H:i" }}</div>
+              {% if lecture.lecture_file %}
+                <a href="{% url 'download_lecture_file' lecture.id %}" class="btn btn-sm btn-outline-primary">
+                  <i class="fas fa-download me-1"></i>Скачать файл
+                </a>
+              {% elif lecture.content_url %}
+                <a href="{{ lecture.content_url }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                  Открыть ссылку
+                </a>
+              {% endif %}
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">Материалы пока не опубликованы</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
     <div class="card">
       <div class="card-header"><h5 class="mb-0">Расписание</h5></div>
       <div class="card-body p-0">

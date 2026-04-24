@@ -34,6 +34,7 @@ urlpatterns = [
     path('students/<int:pk>/profile/', views.student_public_profile, name='student_public_profile'),
     path('courses/<int:pk>/lectures/', views.course_lectures, name='course_lectures'),
     path('lectures/<int:pk>/', views.lecture_detail, name='lecture_detail'),
+    path('lectures/<int:pk>/download/', views.download_lecture_file, name='download_lecture_file'),
     path('demo/', views.demo_page, name='demo_page'),
 
     # API для ML

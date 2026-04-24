@@ -59,7 +59,7 @@
                   <i class="fas fa-user me-1"></i>Профиль
                 </a>
               </li>
-            {% else %}
+            {% elif user.profile and user.profile.role == 'student' %}
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'dashboard' %}">
                   <i class="fas fa-tachometer-alt me-1"></i>Главная
@@ -82,12 +82,23 @@
               </li>
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'ai_assistant' %}">
-                  <i class="fas fa-robot me-1"></i>ИИ-помощник
+                  <i class="fas fa-robot me-1"></i>База знаний
                 </a>
               </li>
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'ai_learning_assistant' %}">
                   <i class="fas fa-brain me-1"></i>Умный ассистент
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'profile' %}">
+                  <i class="fas fa-user me-1"></i>Профиль
+                </a>
+              </li>
+            {% else %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'dashboard' %}">
+                  <i class="fas fa-tachometer-alt me-1"></i>Панель
                 </a>
               </li>
               <li class="nav-item">
@@ -119,6 +130,11 @@
             </li>
           {% endif %}
         </ul>
+        <div class="d-flex align-items-center ms-lg-3 mt-3 mt-lg-0">
+          <button id="theme-toggle" class="btn btn-sm btn-outline-primary" type="button" aria-label="Переключить тему">
+            <i class="fas fa-moon me-1"></i><span id="theme-toggle-label">Тёмная</span>
+          </button>
+        </div>
       </div>
     </div>
   </nav>
@@ -156,6 +172,40 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const storageKey = "uniquest-theme";
+      const toggle = document.getElementById("theme-toggle");
+      const label = document.getElementById("theme-toggle-label");
+
+      function applyTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        const dark = theme === "dark";
+        if (label) label.textContent = dark ? "Тёмная" : "Светлая";
+        if (toggle) {
+          const icon = toggle.querySelector("i");
+          if (icon) {
+            icon.classList.toggle("fa-moon", dark);
+            icon.classList.toggle("fa-sun", !dark);
+          }
+        }
+      }
+
+      const saved = localStorage.getItem(storageKey);
+      const initialTheme = saved === "light" || saved === "dark" ? saved : "dark";
+      applyTheme(initialTheme);
+
+      if (toggle) {
+        toggle.addEventListener("click", function () {
+          const current = root.getAttribute("data-theme") || "dark";
+          const next = current === "dark" ? "light" : "dark";
+          localStorage.setItem(storageKey, next);
+          applyTheme(next);
+        });
+      }
+    })();
+  </script>
   <script>
     const revealObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {

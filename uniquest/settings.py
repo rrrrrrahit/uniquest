@@ -6,6 +6,11 @@ from dotenv import load_dotenv
 # Загружаем .env
 load_dotenv()
 
+
+def _is_remote_db_host(host: str) -> bool:
+    """True for non-local DB hosts where SSL is usually required."""
+    return bool(host and host not in ("localhost", "127.0.0.1"))
+
 # --- ПУТИ ---
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -111,6 +116,10 @@ elif 'DATABASE_URL' in os.environ:
             conn_max_age=600,
             conn_health_checks=True,
         )}
+        db_host = DATABASES['default'].get('HOST', '')
+        if _is_remote_db_host(db_host):
+            DATABASES['default'].setdefault('OPTIONS', {})
+            DATABASES['default']['OPTIONS'].setdefault('sslmode', 'require')
     except ImportError:
         # Если dj-database-url не установлен, парсим вручную
         import urllib.parse
@@ -140,7 +149,7 @@ else:
     db_host = os.environ.get('DB_HOST', '')
     db_password = os.environ.get('DB_PASSWORD', '')
 
-    if db_password or (db_host and db_host not in ('localhost', '127.0.0.1')):
+    if db_password or _is_remote_db_host(db_host):
         DATABASES = {
             'default': {
                 'ENGINE': 'django.db.backends.postgresql',
@@ -155,6 +164,8 @@ else:
                 'CONN_MAX_AGE': 600,
             }
         }
+        if _is_remote_db_host(db_host):
+            DATABASES['default']['OPTIONS']['sslmode'] = 'require'
     else:
         DATABASES = {
             'default': {
@@ -182,10 +193,17 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Для Render safer-режим: без strict manifest, чтобы исключить 500 на статику
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # --- МЕДИА ---
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- AUTH URLS ---
+# Чтобы @login_required не уводил на /accounts/login/ (которого нет в проекте)
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/dashboard/'
+LOGOUT_REDIRECT_URL = '/'

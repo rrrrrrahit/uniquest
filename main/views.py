@@ -1248,7 +1248,17 @@ def dashboard(request):
         students = Student.objects.select_related("group", "user")
         for st in students:
             enrollments_st = Enrollment.objects.filter(student=st)
-            grades_qs = Grade.objects.filter(enrollment__in=enrollments_st)
+            # Не завязываемся на Grade.enrollment: в части прод-БД это поле может отсутствовать
+            # при старой схеме, что приводит к 500 на /dashboard/.
+            student_user = getattr(st, "user", None)
+            course_ids = list(enrollments_st.values_list("course_id", flat=True))
+            if student_user and course_ids:
+                grades_qs = Grade.objects.filter(
+                    student=student_user,
+                    course_id__in=course_ids,
+                )
+            else:
+                grades_qs = Grade.objects.none()
             att_qs = Attendance.objects.filter(enrollment__in=enrollments_st)
 
             st_avg = grades_qs.aggregate(avg=Avg("value"))["avg"] or 0

@@ -68,6 +68,15 @@ def _role_home(user):
     return "dashboard"
 
 
+def _user_can_access_course(user, course):
+    user_profile = getattr(user, "profile", None)
+    if user.is_staff and not user_profile:
+        return True
+    if user_profile and user_profile.role == Profile.ROLE_TEACHER:
+        return course.teacher_id == user.id
+    return Enrollment.objects.filter(student__user=user, course=course).exists()
+
+
 def _ensure_registration_reference_data():
     """Гарантирует, что в форме регистрации есть группы и специальность."""
     if not Group.objects.exists():
@@ -1861,6 +1870,9 @@ def predict_exam_view(request, course_id):
     from .models import Course
     
     course = get_object_or_404(Course, id=course_id)
+    if not Enrollment.objects.filter(student__user=request.user, course=course).exists():
+        messages.error(request, 'Недостаточно прав для прогноза по этому курсу.')
+        return redirect('ai_learning_assistant')
     
     if request.method == 'POST':
         exam_date_str = request.POST.get('exam_date')
@@ -1891,6 +1903,9 @@ def create_study_plan_view(request, course_id):
     from .models import Course
     
     course = get_object_or_404(Course, id=course_id)
+    if not Enrollment.objects.filter(student__user=request.user, course=course).exists():
+        messages.error(request, 'Недостаточно прав для создания плана по этому курсу.')
+        return redirect('ai_learning_assistant')
     
     if request.method == 'POST':
         target_date_str = request.POST.get('target_date')
@@ -1957,6 +1972,14 @@ def group_schedule(request, group_id: int):
 @teacher_required
 def student_public_profile(request, pk: int):
     student = get_object_or_404(Student, id=pk)
+    has_relationship = Enrollment.objects.filter(
+        student=student,
+        course__teacher=request.user,
+    ).exists()
+    if not has_relationship:
+        messages.error(request, "Вы можете просматривать только студентов своих курсов.")
+        return redirect("teacher_dashboard")
+
     enrollments = (
         Enrollment.objects.filter(student=student)
         .select_related("course")
@@ -1994,6 +2017,10 @@ def student_public_profile(request, pk: int):
 @login_required
 def course_lectures(request, pk: int):
     course = get_object_or_404(Course, pk=pk)
+    if not _user_can_access_course(request.user, course):
+        messages.error(request, "У вас нет доступа к лекциям этого курса.")
+        return redirect(_role_home(request.user))
+
     lectures = Lecture.objects.filter(course=course).order_by("created_at")
     q = request.GET.get("q", "").strip()
     search_results = None
@@ -2014,6 +2041,10 @@ def course_lectures(request, pk: int):
 @login_required
 def lecture_detail(request, pk: int):
     lecture = get_object_or_404(Lecture, pk=pk)
+    if not _user_can_access_course(request.user, lecture.course):
+        messages.error(request, "У вас нет доступа к этому материалу.")
+        return redirect(_role_home(request.user))
+
     related = semantic_search(lecture.title, top_k=5)
     return render(
         request,

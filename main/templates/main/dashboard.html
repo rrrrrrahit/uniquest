@@ -402,9 +402,17 @@
                 {% endif %}
               </div>
               <div class="text-nowrap ms-3">
+                {% if doc.lecture_file %}
                 <a href="{% url 'download_lecture_file' doc.id %}" class="btn btn-sm btn-outline-primary">
                   <i class="fas fa-download me-1"></i>Скачать
                 </a>
+                {% elif doc.content_url %}
+                <a href="{{ doc.content_url }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer">
+                  <i class="fas fa-up-right-from-square me-1"></i>Открыть ссылку
+                </a>
+                {% else %}
+                <span class="badge bg-secondary">Текстовый материал</span>
+                {% endif %}
                 <a href="{% url 'course_detail' doc.course.id %}" class="btn btn-sm btn-outline-secondary ms-1">
                   Открыть курс
                 </a>

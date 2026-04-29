@@ -46,6 +46,17 @@ def _supports_lecture_file() -> bool:
     return "lecture_file" in {f.name for f in Lecture._meta.get_fields()}
 
 
+def _recent_materials_queryset(base_qs):
+    qs = base_qs.select_related("course").order_by("-created_at")
+    if _supports_lecture_file():
+        return qs.filter(
+            Q(lecture_file__isnull=False)
+            | ~Q(content_url="")
+            | ~Q(content_text="")
+        ).exclude(lecture_file="")
+    return qs.filter(~Q(content_url="") | ~Q(content_text=""))
+
+
 # Централизованный редирект пользователя по роли.
 def _role_home(user):
     # Берём роль напрямую из БД, чтобы не поймать stale-кэш profile после регистрации.
@@ -1355,15 +1366,9 @@ def _dashboard_impl(request):
         course__in=courses,
         due_date__gte=timezone.now()
     ).order_by('due_date')[:5]
-    if _supports_lecture_file():
-        recent_documents = (
-            Lecture.objects.filter(course__in=courses, lecture_file__isnull=False)
-            .exclude(lecture_file="")
-            .select_related("course")
-            .order_by("-created_at")[:10]
-        )
-    else:
-        recent_documents = []
+    recent_documents = list(
+        _recent_materials_queryset(Lecture.objects.filter(course__in=courses))[:10]
+    )
 
     return render(request, 'main/dashboard.html', {
         'courses': courses,
@@ -2158,15 +2163,9 @@ def teacher_dashboard(request):
             }
         )
     advisee_students.sort(key=lambda item: item["risk_score"], reverse=True)
-    if _supports_lecture_file():
-        published_lectures = (
-            Lecture.objects.filter(course__teacher=user, lecture_file__isnull=False)
-            .exclude(lecture_file="")
-            .select_related("course")
-            .order_by("-created_at")[:12]
-        )
-    else:
-        published_lectures = []
+    published_lectures = list(
+        _recent_materials_queryset(Lecture.objects.filter(course__teacher=user))[:12]
+    )
     
     return render(request, 'main/teacher_dashboard.html', {
         'courses': courses,

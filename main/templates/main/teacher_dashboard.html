@@ -104,6 +104,27 @@
             <h5 class="mb-0">Аналитика по студентам</h5>
             <small class="text-muted">Приоритетно отсортировано по риску</small>
           </div>
+          <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+              <div class="col-md-6">
+                <label class="form-label">Поиск студента/курса</label>
+                <input type="text" class="form-control" name="student_q" value="{{ student_q|default:'' }}" placeholder="ФИО, логин или курс">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Уровень риска</label>
+                <select class="form-select" name="risk">
+                  <option value="" {% if not risk_filter %}selected{% endif %}>Все</option>
+                  <option value="critical" {% if risk_filter == 'critical' %}selected{% endif %}>Critical</option>
+                  <option value="high" {% if risk_filter == 'high' %}selected{% endif %}>High</option>
+                  <option value="medium" {% if risk_filter == 'medium' %}selected{% endif %}>Medium</option>
+                  <option value="low" {% if risk_filter == 'low' %}selected{% endif %}>Low</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <button class="btn btn-outline-primary w-100" type="submit">Применить фильтр</button>
+              </div>
+            </form>
+          </div>
           <div class="card-body p-0">
             {% if advisee_students %}
             <div class="table-responsive">
@@ -138,6 +159,19 @@
                 </tbody>
               </table>
             </div>
+            {% if advisee_page and advisee_page.paginator.num_pages > 1 %}
+              <div class="p-3 d-flex justify-content-between align-items-center border-top">
+                <small class="text-muted">Страница {{ advisee_page.number }} из {{ advisee_page.paginator.num_pages }}</small>
+                <div class="btn-group btn-group-sm">
+                  {% if advisee_page.has_previous %}
+                    <a class="btn btn-outline-secondary" href="?page={{ advisee_page.previous_page_number }}{% if student_q %}&student_q={{ student_q|urlencode }}{% endif %}{% if risk_filter %}&risk={{ risk_filter }}{% endif %}">Назад</a>
+                  {% endif %}
+                  {% if advisee_page.has_next %}
+                    <a class="btn btn-outline-secondary" href="?page={{ advisee_page.next_page_number }}{% if student_q %}&student_q={{ student_q|urlencode }}{% endif %}{% if risk_filter %}&risk={{ risk_filter }}{% endif %}">Вперёд</a>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
             {% else %}
               <div class="p-3 text-muted">Пока нет студентов, закреплённых за вашими курсами.</div>
             {% endif %}

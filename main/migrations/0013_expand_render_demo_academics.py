@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth.hashers import make_password
 from django.db import migrations
 from django.utils import timezone
 
@@ -102,10 +103,9 @@ def seed_expanded_demo_academics(apps, schema_editor):
                 "last_name": last,
                 "email": email,
                 "is_active": True,
+                "password": make_password("Student2026!"),
             },
         )
-        user.set_password("Student2026!")
-        user.save(update_fields=["password"])
 
         group, spec = groups[group_name]
         Profile.objects.update_or_create(

@@ -5,7 +5,9 @@ from django.core.management import call_command
 from django.test import TestCase, Client
 from django.urls import reverse
 
-from .models import Student, Group, Course, Lecture
+from django.contrib.auth.models import User
+
+from .models import Student, Group, Course, Lecture, Profile, Enrollment
 
 
 class SeedDemoTests(TestCase):
@@ -49,8 +51,6 @@ class ApiTests(TestCase):
         # Индексируем лекции (может упасть в BM25 fallback, это нормально)
         call_command("index_lectures")
 
-        from django.contrib.auth.models import User
-
         self.staff = User.objects.create_user(
             username="admin", password="admin123", is_staff=True
         )
@@ -79,6 +79,7 @@ class ApiTests(TestCase):
 
     def test_search_resources_api(self):
         client = Client()
+        client.login(username="admin", password="admin123")
         url = reverse("api_search_resources")
         resp = client.post(
             url,
@@ -88,6 +89,83 @@ class ApiTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("results", data)
+
+
+class RoleAccessSmokeTests(TestCase):
+    def setUp(self):
+        self.teacher = User.objects.create_user(
+            username="teacher1",
+            password="pass12345",
+            is_staff=True,
+        )
+        Profile.objects.update_or_create(user=self.teacher, defaults={"role": Profile.ROLE_TEACHER})
+
+        self.student_owner = User.objects.create_user(
+            username="student_owner",
+            password="pass12345",
+        )
+        self.student_other = User.objects.create_user(
+            username="student_other",
+            password="pass12345",
+        )
+        self.student_foreign = User.objects.create_user(
+            username="student_foreign",
+            password="pass12345",
+        )
+
+        group = Group.objects.create(name="QA-101", year=2026)
+        Profile.objects.update_or_create(user=self.student_owner, defaults={"role": Profile.ROLE_STUDENT, "group": group})
+        Profile.objects.update_or_create(user=self.student_other, defaults={"role": Profile.ROLE_STUDENT, "group": group})
+        Profile.objects.update_or_create(user=self.student_foreign, defaults={"role": Profile.ROLE_STUDENT, "group": group})
+
+        self.student_owner_row = Student.objects.create(
+            user=self.student_owner,
+            first_name="Owner",
+            last_name="Student",
+            email="owner@example.com",
+            group=group,
+        )
+        self.student_other_row = Student.objects.create(
+            user=self.student_other,
+            first_name="Other",
+            last_name="Student",
+            email="other@example.com",
+            group=group,
+        )
+        self.student_foreign_row = Student.objects.create(
+            user=self.student_foreign,
+            first_name="Foreign",
+            last_name="Student",
+            email="foreign@example.com",
+            group=group,
+        )
+
+        self.course_owned = Course.objects.create(name="Owned course", code="OWN101", teacher=self.teacher)
+        self.course_foreign = Course.objects.create(name="Foreign course", code="FRG101")
+        self.lecture_owned = Lecture.objects.create(course=self.course_owned, title="Lecture 1", content_text="x")
+        self.lecture_foreign = Lecture.objects.create(course=self.course_foreign, title="Lecture X", content_text="x")
+
+        Enrollment.objects.create(student=self.student_owner_row, course=self.course_owned)
+        Enrollment.objects.create(student=self.student_other_row, course=self.course_owned)
+        Enrollment.objects.create(student=self.student_foreign_row, course=self.course_foreign)
+
+    def test_student_cannot_open_foreign_lecture_detail(self):
+        client = Client()
+        client.login(username="student_owner", password="pass12345")
+        resp = client.get(reverse("lecture_detail", kwargs={"pk": self.lecture_foreign.id}))
+        self.assertEqual(resp.status_code, 302)
+
+    def test_student_cannot_predict_for_foreign_course(self):
+        client = Client()
+        client.login(username="student_owner", password="pass12345")
+        resp = client.post(reverse("predict_exam", kwargs={"course_id": self.course_foreign.id}), data={})
+        self.assertEqual(resp.status_code, 302)
+
+    def test_teacher_cannot_open_unrelated_student_profile(self):
+        client = Client()
+        client.login(username="teacher1", password="pass12345")
+        resp = client.get(reverse("student_public_profile", kwargs={"pk": self.student_foreign_row.id}))
+        self.assertEqual(resp.status_code, 302)
 
 
 

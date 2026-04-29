@@ -207,7 +207,7 @@ class Command(BaseCommand):
                 user=user,
                 defaults={
                     "role": Profile.ROLE_STUDENT,
-                    "group": group.name if group else "",
+                    "group": group,
                     "bio": f"Студент {group.name if group else 'без группы'}",
                     "phone": f"+7{random.randint(7000000000, 7999999999)}",
                 },
@@ -352,7 +352,6 @@ class Command(BaseCommand):
                     assignment_name=f"Домашнее задание {i + 1}",
                     value=round(value, 2),
                     date=grade_date,
-                    date_recorded=grade_date,
                     topic="Домашние задания",
                 )
                 grades_created += 1
@@ -367,7 +366,6 @@ class Command(BaseCommand):
                 assignment_name="Midterm",
                 value=round(midterm_value, 2),
                 date=midterm_date,
-                date_recorded=midterm_date,
                 topic="Midterm",
             )
             grades_created += 1
@@ -382,7 +380,6 @@ class Command(BaseCommand):
                 assignment_name="Финальный экзамен",
                 value=round(final_value, 2),
                 date=final_date,
-                date_recorded=final_date,
                 topic="Финал",
             )
             grades_created += 1
@@ -461,13 +458,12 @@ class Command(BaseCommand):
 
             schedule_entry, _ = ScheduleEntry.objects.update_or_create(
                 course=course,
-                group=group,
                 weekday=data["weekday"],
                 start_time=data["start"],
                 end_time=data["end"],
                 defaults={"classroom": data["room"]},
             )
-            related_profiles = Profile.objects.filter(group=group.name)
+            related_profiles = Profile.objects.filter(group=group, role=Profile.ROLE_STUDENT)
             if related_profiles.exists():
                 schedule_entry.groups.set(related_profiles)
 
@@ -487,7 +483,7 @@ class Command(BaseCommand):
             user=student_user,
             defaults={
                 "role": Profile.ROLE_STUDENT,
-                "group": group.name,
+                "group": group,
                 "bio": "Магистрантка 2 курса по специальности «Вычислительная техника и ПО».",
             },
         )
@@ -571,7 +567,7 @@ class Command(BaseCommand):
                     defaults={"present": True},
                 )
 
-        log_line("Добавлены специальные данные для Айдиновой С. Р. и Жасұзаковой М. Ж.")
-        self.stdout.write("Добавлены персональные данные: Айдинова С. Р. и Жасұзакова М. Ж.")
+        log_line("Добавлены специальные данные для Айдиновой С. Р. и Жасузаковой М. Ж.")
+        self.stdout.write("Добавлены персональные данные: Айдинова С. Р. и Жасузакова М. Ж.")
 
 

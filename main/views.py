@@ -34,6 +34,8 @@ from .models import (
 )
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
+from django.core.cache import cache
+from django.core.paginator import Paginator
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from datetime import timedelta
@@ -80,6 +82,20 @@ def _user_can_access_course(user, course):
 def _deny_and_redirect(request, text, route_name=None):
     messages.error(request, text)
     return redirect(route_name or _role_home(request.user))
+
+
+def _rate_limit_exceeded(request, scope, limit=10, window_seconds=60):
+    actor = (
+        f"user:{request.user.id}"
+        if getattr(request, "user", None) and request.user.is_authenticated
+        else f"ip:{request.META.get('REMOTE_ADDR', 'unknown')}"
+    )
+    cache_key = f"rl:{scope}:{actor}"
+    current = cache.get(cache_key, 0)
+    if current >= limit:
+        return True
+    cache.set(cache_key, current + 1, timeout=window_seconds)
+    return False
 
 
 def _ensure_registration_reference_data():
@@ -788,6 +804,10 @@ def register_view(request):
     _ensure_registration_reference_data()
 
     if request.method == 'POST':
+        if _rate_limit_exceeded(request, "register", limit=8, window_seconds=300):
+            messages.error(request, "Слишком много попыток регистрации. Повторите позже.")
+            form = UserRegisterForm(request.POST)
+            return render(request, 'main/register.html', {'form': form})
         form = UserRegisterForm(request.POST)
         if form.is_valid():
             try:
@@ -846,6 +866,10 @@ def login_view(request):
         return redirect(_role_home(request.user))
 
     if request.method == 'POST':
+        if _rate_limit_exceeded(request, "login", limit=20, window_seconds=300):
+            messages.error(request, 'Слишком много попыток входа. Повторите позже.')
+            form = AuthenticationForm(request=request, data=request.POST)
+            return render(request, 'main/login.html', {'form': form})
         form = AuthenticationForm(request=request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
@@ -2205,6 +2229,19 @@ def teacher_dashboard(request):
             }
         )
     advisee_students.sort(key=lambda item: item["risk_score"], reverse=True)
+    student_query = request.GET.get("student_q", "").strip().lower()
+    risk_filter = request.GET.get("risk", "").strip().lower()
+    if student_query:
+        advisee_students = [
+            row for row in advisee_students
+            if student_query in (row["student_user"].get_full_name() or row["student_user"].username).lower()
+            or student_query in row["courses"].lower()
+        ]
+    if risk_filter in {"critical", "high", "medium", "low"}:
+        advisee_students = [row for row in advisee_students if row["risk_level"] == risk_filter]
+
+    paginator = Paginator(advisee_students, 20)
+    advisee_page = paginator.get_page(request.GET.get("page"))
     published_lectures = list(
         _recent_materials_queryset(Lecture.objects.filter(course__teacher=user))[:12]
     )
@@ -2217,7 +2254,10 @@ def teacher_dashboard(request):
         'recent_grades': recent_grades,
         'grade_form': grade_form,
         'lecture_form': lecture_form,
-        'advisee_students': advisee_students[:30],
+        'advisee_students': advisee_page.object_list,
+        'advisee_page': advisee_page,
+        'student_q': request.GET.get("student_q", "").strip(),
+        'risk_filter': risk_filter,
         'published_lectures': published_lectures,
     })
 
@@ -2336,6 +2376,9 @@ def ai_analysis_view(request, student_id, course_id):
 @login_required
 @staff_required
 def api_predict_grade(request):
+    if _rate_limit_exceeded(request, "api_predict_grade", limit=40, window_seconds=60):
+        return JsonResponse({"detail": "Слишком много запросов. Повторите позже."}, status=429)
+
     if request.method != "POST":
         return JsonResponse({"detail": "Только POST"}, status=405)
     try:
@@ -2439,6 +2482,9 @@ def api_search_resources(request):
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "Требуется авторизация"}, status=401)
 
+    if _rate_limit_exceeded(request, "api_search_resources", limit=60, window_seconds=60):
+        return JsonResponse({"detail": "Слишком много запросов. Повторите позже."}, status=429)
+
     if request.method != "POST":
         return JsonResponse({"detail": "Только POST"}, status=405)
     try:
@@ -2457,6 +2503,9 @@ def api_search_resources(request):
 @login_required
 @staff_required
 def api_retrain_embeddings(request):
+    if _rate_limit_exceeded(request, "api_retrain_embeddings", limit=5, window_seconds=300):
+        return JsonResponse({"detail": "Слишком много запросов. Повторите позже."}, status=429)
+
     if request.method != "POST":
         return JsonResponse({"detail": "Только POST"}, status=405)
     from django.core.management import call_command

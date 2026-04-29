@@ -1201,8 +1201,7 @@ def build_student_performance_report(student_user, teacher=None):
     }
 
 # ===== Панель пользователя =====
-@login_required
-def dashboard(request):
+def _dashboard_impl(request):
     user = request.user
     
     # Проверяем роль преподавателя ПЕРВЫМ делом
@@ -1364,6 +1363,56 @@ def dashboard(request):
         'recent_documents': recent_documents,
         'is_admin_dashboard': False,
     })
+
+
+@login_required
+def dashboard(request):
+    """
+    Защитный wrapper для продакшена: не отдаём 500 пользователю,
+    даже если в аналитике возникла неожиданная ошибка данных.
+    """
+    try:
+        return _dashboard_impl(request)
+    except Exception:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Dashboard failed, fallback response returned")
+        messages.warning(
+            request,
+            "Некоторые аналитические блоки временно недоступны. Показан упрощённый дашборд."
+        )
+        if request.user.is_staff:
+            return render(
+                request,
+                "main/dashboard.html",
+                {
+                    "is_admin_dashboard": True,
+                    "total_students": 0,
+                    "active_groups": 0,
+                    "total_courses": 0,
+                    "recent_enrollments": [],
+                    "total_grades": 0,
+                    "avg_grade_system": 0,
+                    "attendance_system": 0,
+                    "risk_students": [],
+                    "risk_groups": [],
+                },
+            )
+
+        return render(
+            request,
+            "main/dashboard.html",
+            {
+                "courses": [],
+                "user_grades": [],
+                "avg_score": 0,
+                "recent_grades": [],
+                "upcoming_assignments": [],
+                "recent_documents": [],
+                "is_admin_dashboard": False,
+            },
+        )
 
 
 @login_required

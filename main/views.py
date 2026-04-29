@@ -1616,22 +1616,24 @@ def grades_view(request):
     })
 
 @login_required
-@student_required
 def ai_assistant(request):
-    """ИИ-помощник для студентов с поиском по специальности"""
+    """База знаний с семантическим поиском по доступным материалам."""
     try:
         user = request.user
         profile = getattr(user, 'profile', None)
         specialty = profile.specialty if profile and hasattr(profile, 'specialty') and profile.specialty else None
+        is_teacher = bool(profile and profile.role == Profile.ROLE_TEACHER)
         
-        # Получаем курсы студента
+        # Получаем курсы пользователя по роли
         student_obj = None
-        student_courses = []
-        if profile:
+        user_courses = []
+        if is_teacher:
+            user_courses = list(Course.objects.filter(teacher=user))
+        elif profile:
             try:
                 student_obj = Student.objects.get(user=user)
                 enrollments = Enrollment.objects.filter(student=student_obj).select_related('course')
-                student_courses = [e.course for e in enrollments if e.course]
+                user_courses = [e.course for e in enrollments if e.course]
             except Student.DoesNotExist:
                 pass
             except Exception:
@@ -1672,27 +1674,16 @@ def ai_assistant(request):
                         except Exception:
                             pass
                 
-                # Фильтруем по курсам студента, если есть
-                if student_courses:
-                    course_ids = [c.id for c in student_courses if c and hasattr(c, 'id')]
-                    filtered_results = []
-                    other_results = []
-                    
+                # Строго ограничиваем результаты только доступными курсами пользователя.
+                if user_courses:
+                    course_ids = {c.id for c in user_courses if c and hasattr(c, 'id')}
                     for result in all_results:
                         lecture = result.get('lecture')
-                        if lecture and hasattr(lecture, 'course') and lecture.course:
-                            try:
-                                if lecture.course.id in course_ids:
-                                    filtered_results.append(result)
-                                else:
-                                    other_results.append(result)
-                            except (AttributeError, TypeError):
-                                other_results.append(result)
-                        else:
-                            other_results.append(result)
-                    
-                    # Сначала показываем результаты из курсов студента
-                    search_results = filtered_results + other_results[:5]
+                        if lecture and getattr(lecture, "course_id", None) in course_ids:
+                            search_results.append(result)
+                    search_results = search_results[:10]
+                elif is_teacher:
+                    search_results = []
                 else:
                     search_results = all_results[:10]
 
@@ -1703,8 +1694,10 @@ def ai_assistant(request):
                         | Q(content_text__icontains=query)
                         | Q(course__name__icontains=query)
                     )
-                    if student_courses:
-                        fallback_qs = fallback_qs.filter(course__in=student_courses)
+                    if user_courses:
+                        fallback_qs = fallback_qs.filter(course__in=user_courses)
+                    elif is_teacher:
+                        fallback_qs = fallback_qs.none()
                     fallback_qs = fallback_qs[:10]
                     for lecture in fallback_qs:
                         snippet_source = build_lecture_snippet(lecture, query, max_len=240)
@@ -1725,8 +1718,14 @@ def ai_assistant(request):
                 search_results = []
                 messages.warning(request, 'Поиск временно недоступен. Попробуйте позже.')
         else:
-            # Предлагаем вопросы по специальности
-            if specialty and hasattr(specialty, 'name_ru'):
+            # Предлагаем вопросы с учетом роли
+            if is_teacher:
+                suggested_questions = [
+                    "Материалы по моим курсам за последний месяц",
+                    "Темы, где у студентов больше всего ошибок",
+                    "Ресурсы для подготовки к промежуточному контролю",
+                ]
+            elif specialty and hasattr(specialty, 'name_ru'):
                 suggested_questions = [
                     f"Что изучают на специальности {specialty.name_ru}?",
                     f"Какие предметы входят в программу {specialty.name_ru}?",
@@ -1755,8 +1754,9 @@ def ai_assistant(request):
             'suggested_questions': suggested_questions,
             'popular_questions': popular_questions,
             'specialty': specialty,
-            'student_courses': student_courses,
+            'student_courses': user_courses,
             'focus_areas': focus_areas,
+            'is_teacher': is_teacher,
         })
     except Exception as e:
         # Общая обработка ошибок
@@ -1776,6 +1776,7 @@ def ai_assistant(request):
             'specialty': None,
             'student_courses': [],
             'focus_areas': [],
+            'is_teacher': False,
         })
 
 

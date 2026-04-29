@@ -13,6 +13,9 @@
         <h1 class="mb-1">База знаний</h1>
         <p class="text-muted mb-0">
           Умный поиск по учебным материалам
+          {% if is_teacher %}
+            <span class="badge bg-primary ms-2">Режим преподавателя</span>
+          {% endif %}
           {% if specialty %}
             <span class="badge bg-info ms-2">{{ specialty.name_ru }}</span>
           {% endif %}
@@ -219,8 +222,8 @@
               <div class="d-flex align-items-start">
                 <i class="fas fa-filter fa-2x text-success me-3"></i>
                 <div>
-                  <h6>Фильтрация по курсам</h6>
-                  <p class="small text-muted mb-0">Приоритет отдается материалам из ваших курсов</p>
+                  <h6>Фильтрация по доступу</h6>
+                  <p class="small text-muted mb-0">Показываются только материалы, к которым у вас есть доступ</p>
                 </div>
               </div>
             </div>

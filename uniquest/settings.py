@@ -42,6 +42,15 @@ if render_host:
     if '*.onrender.com' not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append('*.onrender.com')
 
+# Подстраховка CSRF для Render/custom host: автоматически доверяем текущим host'ам.
+_auto_csrf_origins = set(CSRF_TRUSTED_ORIGINS)
+for host in ALLOWED_HOSTS:
+    clean_host = host.lstrip(".")
+    if clean_host and clean_host != "*":
+        _auto_csrf_origins.add(f"https://{host}")
+        _auto_csrf_origins.add(f"http://{host}")
+CSRF_TRUSTED_ORIGINS = sorted(_auto_csrf_origins)
+
 # Безопасность для production
 if not DEBUG:
     # Корректно определяем HTTPS за reverse proxy (Render/Nginx и т.д.)

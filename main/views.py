@@ -43,8 +43,11 @@ from .search_service import semantic_search, build_lecture_snippet
 
 # Централизованный редирект пользователя по роли.
 def _role_home(user):
-    profile = getattr(user, "profile", None)
-    if profile and profile.role == Profile.ROLE_TEACHER:
+    # Берём роль напрямую из БД, чтобы не поймать stale-кэш profile после регистрации.
+    profile_role = (
+        Profile.objects.filter(user_id=user.id).values_list("role", flat=True).first()
+    )
+    if profile_role == Profile.ROLE_TEACHER:
         return "teacher_dashboard"
     return "dashboard"
 
@@ -797,7 +800,7 @@ def register_view(request):
                     )
                 login(request, user)
                 messages.success(request, 'Регистрация успешна. Добро пожаловать!')
-                return redirect(_role_home(user))
+                return redirect("teacher_dashboard" if role == Profile.ROLE_TEACHER else "dashboard")
             except Exception as e:
                 messages.error(request, f'Ошибка при регистрации: {str(e)}')
                 # Логируем ошибку для отладки

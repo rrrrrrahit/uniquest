@@ -41,6 +41,11 @@ import json
 
 from .search_service import semantic_search, build_lecture_snippet
 
+
+def _supports_lecture_file() -> bool:
+    return "lecture_file" in {f.name for f in Lecture._meta.get_fields()}
+
+
 # Централизованный редирект пользователя по роли.
 def _role_home(user):
     # Берём роль напрямую из БД, чтобы не поймать stale-кэш profile после регистрации.
@@ -1350,12 +1355,15 @@ def _dashboard_impl(request):
         course__in=courses,
         due_date__gte=timezone.now()
     ).order_by('due_date')[:5]
-    recent_documents = (
-        Lecture.objects.filter(course__in=courses, lecture_file__isnull=False)
-        .exclude(lecture_file="")
-        .select_related("course")
-        .order_by("-created_at")[:10]
-    )
+    if _supports_lecture_file():
+        recent_documents = (
+            Lecture.objects.filter(course__in=courses, lecture_file__isnull=False)
+            .exclude(lecture_file="")
+            .select_related("course")
+            .order_by("-created_at")[:10]
+        )
+    else:
+        recent_documents = []
 
     return render(request, 'main/dashboard.html', {
         'courses': courses,
@@ -2031,7 +2039,7 @@ def download_lecture_file(request, pk: int):
         messages.error(request, "У вас нет доступа к этому материалу.")
         return redirect("dashboard")
 
-    if not lecture.lecture_file:
+    if not _supports_lecture_file() or not getattr(lecture, "lecture_file", None):
         messages.error(request, "Файл лекции не найден.")
         return redirect("course_detail", pk=lecture.course_id)
 
@@ -2150,12 +2158,15 @@ def teacher_dashboard(request):
             }
         )
     advisee_students.sort(key=lambda item: item["risk_score"], reverse=True)
-    published_lectures = (
-        Lecture.objects.filter(course__teacher=user, lecture_file__isnull=False)
-        .exclude(lecture_file="")
-        .select_related("course")
-        .order_by("-created_at")[:12]
-    )
+    if _supports_lecture_file():
+        published_lectures = (
+            Lecture.objects.filter(course__teacher=user, lecture_file__isnull=False)
+            .exclude(lecture_file="")
+            .select_related("course")
+            .order_by("-created_at")[:12]
+        )
+    else:
+        published_lectures = []
     
     return render(request, 'main/teacher_dashboard.html', {
         'courses': courses,

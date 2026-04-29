@@ -1,2 +1,2 @@
-web: gunicorn uniquest.wsgi:application --bind 0.0.0.0:$PORT
+web: gunicorn uniquest.wsgi:application --bind 0.0.0.0:$PORT --access-logfile - --error-logfile - --capture-output --log-level info
 

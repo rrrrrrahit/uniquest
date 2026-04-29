@@ -1518,6 +1518,7 @@ def course_detail(request, pk):
 
 @login_required
 def profile_view(request):
+    Profile.objects.get_or_create(user=request.user)
     if request.method == 'POST':
         u_form = UserUpdateForm(request.POST, instance=request.user)
         p_form = ProfileUpdateForm(
@@ -1937,7 +1938,9 @@ def create_study_plan_view(request, course_id):
 @teacher_required
 def groups_list(request):
     """Список всех групп"""
-    groups = Group.objects.all().order_by('-year', 'name')
+    groups = Group.objects.filter(
+        student_group__enrollments__course__teacher=request.user
+    ).distinct().order_by('-year', 'name')
     # Добавляем количество студентов в каждой группе
     for group in groups:
         group.student_count = Profile.objects.filter(group=group, role=Profile.ROLE_STUDENT).count()
@@ -1953,7 +1956,10 @@ def group_schedule(request, group_id: int):
     # Получаем профили студентов этой группы
     group_profiles = Profile.objects.filter(group=group, role=Profile.ROLE_STUDENT)
     schedule = (
-        ScheduleEntry.objects.filter(groups__in=group_profiles)
+        ScheduleEntry.objects.filter(
+            groups__in=group_profiles,
+            course__teacher=request.user,
+        )
         .select_related("course")
         .distinct()
         .order_by("weekday", "start_time")
@@ -1981,7 +1987,7 @@ def student_public_profile(request, pk: int):
         return redirect("teacher_dashboard")
 
     enrollments = (
-        Enrollment.objects.filter(student=student)
+        Enrollment.objects.filter(student=student, course__teacher=request.user)
         .select_related("course")
         .order_by("course__name")
     )
@@ -2425,6 +2431,9 @@ def api_predict_grade(request):
 
 
 def api_search_resources(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Требуется авторизация"}, status=401)
+
     if request.method != "POST":
         return JsonResponse({"detail": "Только POST"}, status=405)
     try:

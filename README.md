@@ -84,4 +84,4 @@ python manage.py index_lectures
 ## 📝 Лицензия
 
 Проект создан для образовательных целей.
-
+https://docs.google.com/spreadsheets/d/1oDHMUbaw5qu1WphTrwLt3dWd9EHTW4RYWdAeFOZxhhg/edit?pli=1&gid=0#gid=0

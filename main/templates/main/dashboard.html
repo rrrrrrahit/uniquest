@@ -425,6 +425,16 @@
   </div>
 </div>
 {% endif %}
+{% if not recent_documents %}
+<div class="row mb-4 reveal">
+  <div class="col-12">
+    <div class="alert alert-light border mb-0">
+      <i class="fas fa-folder-open me-2"></i>
+      Новых материалов пока нет. Они появятся здесь, когда преподаватели опубликуют файлы, ссылки или текстовые ресурсы.
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- Мои курсы -->
 <div class="row reveal">

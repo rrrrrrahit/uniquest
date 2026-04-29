@@ -77,6 +77,11 @@ def _user_can_access_course(user, course):
     return Enrollment.objects.filter(student__user=user, course=course).exists()
 
 
+def _deny_and_redirect(request, text, route_name=None):
+    messages.error(request, text)
+    return redirect(route_name or _role_home(request.user))
+
+
 def _ensure_registration_reference_data():
     """Гарантирует, что в форме регистрации есть группы и специальность."""
     if not Group.objects.exists():
@@ -1983,8 +1988,11 @@ def student_public_profile(request, pk: int):
         course__teacher=request.user,
     ).exists()
     if not has_relationship:
-        messages.error(request, "Вы можете просматривать только студентов своих курсов.")
-        return redirect("teacher_dashboard")
+        return _deny_and_redirect(
+            request,
+            "Вы можете просматривать только студентов своих курсов.",
+            "teacher_dashboard",
+        )
 
     enrollments = (
         Enrollment.objects.filter(student=student, course__teacher=request.user)
@@ -2024,8 +2032,7 @@ def student_public_profile(request, pk: int):
 def course_lectures(request, pk: int):
     course = get_object_or_404(Course, pk=pk)
     if not _user_can_access_course(request.user, course):
-        messages.error(request, "У вас нет доступа к лекциям этого курса.")
-        return redirect(_role_home(request.user))
+        return _deny_and_redirect(request, "У вас нет доступа к лекциям этого курса.")
 
     lectures = Lecture.objects.filter(course=course).order_by("created_at")
     q = request.GET.get("q", "").strip()
@@ -2048,8 +2055,7 @@ def course_lectures(request, pk: int):
 def lecture_detail(request, pk: int):
     lecture = get_object_or_404(Lecture, pk=pk)
     if not _user_can_access_course(request.user, lecture.course):
-        messages.error(request, "У вас нет доступа к этому материалу.")
-        return redirect(_role_home(request.user))
+        return _deny_and_redirect(request, "У вас нет доступа к этому материалу.")
 
     related = semantic_search(lecture.title, top_k=5)
     return render(
@@ -2078,8 +2084,7 @@ def download_lecture_file(request, pk: int):
         ).exists()
 
     if not has_access:
-        messages.error(request, "У вас нет доступа к этому материалу.")
-        return redirect("dashboard")
+        return _deny_and_redirect(request, "У вас нет доступа к этому материалу.")
 
     if not _supports_lecture_file() or not getattr(lecture, "lecture_file", None):
         messages.error(request, "Файл лекции не найден.")

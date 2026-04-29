@@ -365,4 +365,15 @@
   </div>
 </div>
 {% endif %}
+{% if not published_lectures %}
+<div class="row mt-4 reveal">
+  <div class="col-12">
+    <div class="alert alert-info mb-0">
+      <i class="fas fa-circle-info me-2"></i>
+      У вас пока нет опубликованных материалов. Добавьте файл, ссылку или текст через блок
+      <strong>"Добавить лекцию / ресурс"</strong>.
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

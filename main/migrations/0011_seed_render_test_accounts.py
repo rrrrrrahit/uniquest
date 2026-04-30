@@ -68,8 +68,9 @@ class Migration(migrations.Migration):
             sql=(
                 "UPDATE main_profile "
                 "SET group_id = NULL "
-                "WHERE group_id IS NOT NULL "
-                "AND group_id NOT IN (SELECT id FROM main_group);"
+                "WHERE TRIM(CAST(group_id AS TEXT)) = '' "
+                "OR (group_id IS NOT NULL "
+                "AND group_id NOT IN (SELECT id FROM main_group));"
             ),
             reverse_sql=migrations.RunSQL.noop,
         ),

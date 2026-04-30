@@ -461,11 +461,11 @@ def get_ai_recommendations(student, course):
             attendance_rate = float(prediction.attendance_rate or 0)
             recommendations.append({
                 'type': 'attendance',
-                'title': 'Посещаемость (САПАР)',
+                'title': 'Посещаемость (САПА)',
                 'text': (
                     f'Текущая посещаемость: {attendance_rate:.1f}%. '
                     'Показатель формируется на основе мониторинга посещаемости '
-                    'системой "САПАР" (камеры в лекционных аудиториях АТУ).'
+                    'системой "САПА" (камеры в лекционных аудиториях АТУ).'
                 ),
                 'icon': 'fa-video'
             })

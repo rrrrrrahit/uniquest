@@ -1,11 +1,12 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth import login, authenticate, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse, FileResponse, Http404
 from functools import wraps
 from collections import defaultdict
-from datetime import timedelta
+from datetime import timedelta, datetime, time
 from pathlib import Path
 from .forms import (
     UserRegisterForm,
@@ -13,6 +14,7 @@ from .forms import (
     ProfileUpdateForm,
     TeacherGradeForm,
     LectureCreateForm,
+    TeacherGradeEntryForm,
 )
 from .models import (
     Profile,
@@ -2159,30 +2161,11 @@ def demo_page(request):
 def teacher_dashboard(request):
     user = request.user
     courses = Course.objects.filter(teacher=user).select_related('subject')
-    grade_form = TeacherGradeForm(teacher=user)
     lecture_form = LectureCreateForm(teacher=user)
 
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "add_grade":
-            grade_form = TeacherGradeForm(request.POST, teacher=user)
-            if grade_form.is_valid():
-                enrollment = grade_form.cleaned_data["enrollment"]
-                student_user = getattr(enrollment.student, "user", None)
-                if not student_user:
-                    messages.error(
-                        request,
-                        "Для этого студента не найден профиль пользователя. Невозможно сохранить оценку.",
-                    )
-                else:
-                    grade = grade_form.save(commit=False)
-                    grade.course = enrollment.course
-                    grade.student = student_user
-                    grade.date = timezone.now()
-                    grade.save()
-                    messages.success(request, "Оценка успешно добавлена.")
-                    return redirect("teacher_dashboard")
-        elif action == "add_resource":
+        if action == "add_resource":
             lecture_form = LectureCreateForm(request.POST, request.FILES, teacher=user)
             if lecture_form.is_valid():
                 lecture_form.save()
@@ -2194,8 +2177,10 @@ def teacher_dashboard(request):
         grades__course__teacher=user
     ).distinct().count()
     
-    total_grades = Grade.objects.filter(course__teacher=user).count()
-    avg_score = Grade.objects.filter(course__teacher=user).aggregate(avg=Avg('value'))['avg'] or 0
+    total_groups = Group.objects.filter(
+        student_group__enrollments__course__teacher=user
+    ).distinct().count()
+    total_materials = Lecture.objects.filter(course__teacher=user).count()
     
     recent_grades = Grade.objects.filter(course__teacher=user).select_related('student', 'course').order_by('-date')[:10]
     advisee_enrollments = (
@@ -2220,9 +2205,11 @@ def teacher_dashboard(request):
     advisee_students = []
     for row in advisee_map.values():
         report = build_student_performance_report(row["student_user"], teacher=user)
+        student_obj = Student.objects.filter(user=row["student_user"]).first()
         advisee_students.append(
             {
                 "student_user": row["student_user"],
+                "student_obj": student_obj,
                 "courses": ", ".join(sorted(set(row["courses"]))),
                 "risk_level": report["overall_risk_level"],
                 "risk_score": report["overall_risk_score"],
@@ -2241,6 +2228,24 @@ def teacher_dashboard(request):
     if risk_filter in {"critical", "high", "medium", "low"}:
         advisee_students = [row for row in advisee_students if row["risk_level"] == risk_filter]
 
+    hierarchy = []
+    groups_qs = Group.objects.filter(
+        student_group__enrollments__course__teacher=user
+    ).distinct().order_by("course_year", "name")
+    for group in groups_qs:
+        group_students = [row for row in advisee_students if row.get("student_obj") and row["student_obj"].group_id == group.id]
+        disciplines = Course.objects.filter(
+            teacher=user, enrollments__student__group=group
+        ).distinct().order_by("name")
+        hierarchy.append(
+            {
+                "course_year": group.course_year,
+                "group": group,
+                "disciplines": disciplines,
+                "students": group_students,
+            }
+        )
+
     paginator = Paginator(advisee_students, 20)
     advisee_page = paginator.get_page(request.GET.get("page"))
     published_lectures = list(
@@ -2249,17 +2254,18 @@ def teacher_dashboard(request):
     
     return render(request, 'main/teacher_dashboard.html', {
         'courses': courses,
+        'total_disciplines': courses.count(),
+        'total_groups': total_groups,
         'total_students': total_students,
-        'total_grades': total_grades,
-        'avg_score': avg_score,
+        'total_materials': total_materials,
         'recent_grades': recent_grades,
-        'grade_form': grade_form,
         'lecture_form': lecture_form,
         'advisee_students': advisee_page.object_list,
         'advisee_page': advisee_page,
         'student_q': request.GET.get("student_q", "").strip(),
         'risk_filter': risk_filter,
         'published_lectures': published_lectures,
+        'hierarchy': hierarchy,
     })
 
 @login_required
@@ -2268,10 +2274,13 @@ def teacher_courses(request):
     courses = Course.objects.filter(teacher=request.user).prefetch_related("lectures")
     course_cards = []
     for course in courses:
+        group_years = Group.objects.filter(
+            student_group__enrollments__course=course
+        ).values_list("course_year", flat=True).distinct().order_by("course_year")
         materials = [
             lecture
             for lecture in course.lectures.all()
-            if getattr(lecture, "lecture_file", None)
+            if getattr(lecture, "lecture_file", None) or lecture.content_url or lecture.content_text
         ]
         latest_material = materials[0] if materials else None
         course_cards.append(
@@ -2279,15 +2288,137 @@ def teacher_courses(request):
                 "course": course,
                 "materials_count": len(materials),
                 "latest_material": latest_material,
+                "course_years": ", ".join(str(y) for y in group_years) if group_years else "—",
             }
         )
     return render(request, 'main/teacher_courses.html', {'courses': courses, 'course_cards': course_cards})
 
+
+@login_required
+@teacher_required
+def teacher_discipline_detail(request, pk: int):
+    course = get_object_or_404(Course, pk=pk, teacher=request.user)
+    lecture_form = LectureCreateForm(
+        request.POST or None,
+        request.FILES or None,
+        teacher=request.user,
+        initial={"course": course},
+    )
+    if request.method == "POST" and lecture_form.is_valid():
+        lecture = lecture_form.save(commit=False)
+        lecture.course = course
+        lecture.save()
+        messages.success(request, "Материал по дисциплине успешно опубликован.")
+        return redirect("teacher_discipline_detail", pk=course.id)
+
+    lectures = list(course.lectures.all().order_by("-created_at"))
+    weekly_materials = defaultdict(list)
+    for lecture in lectures:
+        week_key = lecture.created_at.isocalendar().week if lecture.created_at else 0
+        weekly_materials[week_key].append(lecture)
+
+    grouped_weeks = [
+        {"week": week, "lectures": items}
+        for week, items in sorted(weekly_materials.items(), key=lambda x: x[0], reverse=True)
+    ]
+    return render(
+        request,
+        "main/teacher_discipline_detail.html",
+        {
+            "course": course,
+            "lecture_form": lecture_form,
+            "grouped_weeks": grouped_weeks,
+        },
+    )
+
 @login_required
 @teacher_required
 def teacher_grades(request):
-    grades = Grade.objects.filter(course__teacher=request.user).select_related('student', 'course').order_by('-date')
-    return render(request, 'main/teacher_grades.html', {'grades': grades})
+    teacher = request.user
+    selected_year = request.GET.get("course_year", "").strip()
+    selected_group_id = request.GET.get("group_id", "").strip()
+    selected_student_id = request.GET.get("student_id", "").strip()
+    date_from = request.GET.get("date_from", "").strip()
+    date_to = request.GET.get("date_to", "").strip()
+
+    groups_qs = Group.objects.filter(
+        student_group__enrollments__course__teacher=teacher
+    ).distinct().order_by("course_year", "name")
+    if selected_year.isdigit():
+        groups_qs = groups_qs.filter(course_year=int(selected_year))
+
+    students_qs = Student.objects.filter(
+        enrollments__course__teacher=teacher
+    ).distinct().order_by("last_name", "first_name")
+    if selected_group_id.isdigit():
+        students_qs = students_qs.filter(group_id=int(selected_group_id))
+
+    courses_qs = Course.objects.filter(teacher=teacher).order_by("name")
+    if selected_group_id.isdigit():
+        courses_qs = courses_qs.filter(enrollments__student__group_id=int(selected_group_id)).distinct()
+
+    grade_entry_form = TeacherGradeEntryForm(
+        request.POST or None,
+        teacher=teacher,
+        initial={"course_year": selected_year, "group": selected_group_id},
+    )
+    if request.method == "POST" and grade_entry_form.is_valid():
+        student = grade_entry_form.cleaned_data["student"]
+        course = grade_entry_form.cleaned_data["course"]
+        grade_date = grade_entry_form.cleaned_data["date"]
+        enrollment = Enrollment.objects.filter(student=student, course=course).first()
+        Grade.objects.create(
+            student=student.user,
+            course=course,
+            enrollment=enrollment,
+            value=grade_entry_form.cleaned_data["value"],
+            topic=grade_entry_form.cleaned_data["topic"] or "",
+            comment=grade_entry_form.cleaned_data["comment"] or "",
+            date=timezone.make_aware(datetime.combine(grade_date, time.min)),
+            assignment_name=f"Оценка от {grade_date.strftime('%d.%m.%Y')}",
+        )
+        messages.success(request, "Оценка сохранена.")
+        return redirect(
+            f"{reverse('teacher_grades')}?course_year={selected_year}&group_id={selected_group_id}&student_id={selected_student_id}&date_from={date_from}&date_to={date_to}"
+        )
+
+    selected_student = None
+    selected_student_user = None
+    student_grades = Grade.objects.none()
+    student_report = None
+
+    if selected_student_id.isdigit():
+        selected_student = students_qs.filter(id=int(selected_student_id)).first()
+        if selected_student and selected_student.user:
+            selected_student_user = selected_student.user
+            student_grades = Grade.objects.filter(
+                student=selected_student_user,
+                course__teacher=teacher,
+            ).select_related("course").order_by("-date")
+            if date_from:
+                student_grades = student_grades.filter(date__date__gte=date_from)
+            if date_to:
+                student_grades = student_grades.filter(date__date__lte=date_to)
+            student_report = build_student_performance_report(selected_student_user, teacher=teacher)
+
+    return render(
+        request,
+        "main/teacher_grades.html",
+        {
+            "groups": groups_qs,
+            "students": students_qs,
+            "courses": courses_qs,
+            "selected_year": selected_year,
+            "selected_group_id": selected_group_id,
+            "selected_student_id": selected_student_id,
+            "date_from": date_from,
+            "date_to": date_to,
+            "selected_student": selected_student,
+            "student_grades": student_grades[:200],
+            "student_report": student_report,
+            "grade_entry_form": grade_entry_form,
+        },
+    )
 
 @login_required
 @teacher_required
@@ -2295,7 +2426,31 @@ def teacher_schedule(request):
     schedule = ScheduleEntry.objects.filter(
         course__teacher=request.user
     ).select_related('course').prefetch_related('groups').order_by('weekday', 'start_time')
-    return render(request, 'main/teacher_schedule.html', {'schedule': schedule})
+    days = [
+        (0, "Понедельник"),
+        (1, "Вторник"),
+        (2, "Среда"),
+        (3, "Четверг"),
+        (4, "Пятница"),
+        (5, "Суббота"),
+    ]
+    time_slots = sorted({(str(item.start_time), str(item.end_time)) for item in schedule})
+    grid = []
+    for start, end in time_slots:
+        row = {"time": f"{start} - {end}", "cells": []}
+        for day_idx, _ in days:
+            items = [
+                e for e in schedule
+                if e.weekday == day_idx and str(e.start_time) == start and str(e.end_time) == end
+            ]
+            row["cells"].append(items)
+        grid.append(row)
+
+    return render(
+        request,
+        'main/teacher_schedule.html',
+        {'schedule': schedule, 'days': days, 'grid': grid},
+    )
 
 # ===== ML/AI функции для оценивания =====
 def analyze_student_performance(student, course):

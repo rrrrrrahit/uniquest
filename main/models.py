@@ -37,6 +37,12 @@ class Subject(models.Model):
 # ----------------- Group -----------------
 class Group(models.Model):
     name = models.CharField(max_length=50, unique=True, verbose_name="Группа")
+    COURSE_YEAR_CHOICES = [(1, "1 курс"), (2, "2 курс"), (3, "3 курс"), (4, "4 курс")]
+    course_year = models.PositiveSmallIntegerField(
+        choices=COURSE_YEAR_CHOICES,
+        default=1,
+        verbose_name="Курс обучения",
+    )
     year = models.IntegerField(verbose_name="Год набора")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
 
@@ -250,6 +256,12 @@ class Lecture(models.Model):
     title = models.CharField(max_length=200, verbose_name='Название')
     content_text = models.TextField(blank=True, verbose_name='Содержание')
     content_url = models.URLField(blank=True, null=True, verbose_name='Ссылка')
+    lecture_file = models.FileField(
+        upload_to='lectures/',
+        blank=True,
+        null=True,
+        verbose_name='Файл лекции'
+    )
     vector_embedding = models.JSONField(null=True, blank=True, verbose_name='Векторное представление')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
 

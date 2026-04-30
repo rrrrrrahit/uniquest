@@ -6,6 +6,9 @@ urlpatterns = [
     path('register/', views.register_view, name='register'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
+    # Алиасы стандартных django-auth URL, чтобы исключить 404 на /accounts/*
+    path('accounts/login/', views.login_view),
+    path('accounts/register/', views.register_view),
     path('create-test-student/', views.create_test_student_view, name='create_test_student'),
     path('create-test-teacher/', views.create_test_teacher_view, name='create_test_teacher'),
 
@@ -23,6 +26,7 @@ urlpatterns = [
 
     path('teacher/dashboard/', views.teacher_dashboard, name='teacher_dashboard'),
     path('teacher/courses/', views.teacher_courses, name='teacher_courses'),
+    path('teacher/disciplines/<int:pk>/', views.teacher_discipline_detail, name='teacher_discipline_detail'),
     path('teacher/grades/', views.teacher_grades, name='teacher_grades'),
     path('teacher/schedule/', views.teacher_schedule, name='teacher_schedule'),
     path('teacher/students/<int:student_id>/analysis/', views.teacher_student_analysis, name='teacher_student_analysis'),

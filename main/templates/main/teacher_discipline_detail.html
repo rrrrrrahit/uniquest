@@ -1,0 +1,84 @@
+{% extends 'main/base.html' %}
+{% block title %}{{ course.name }} — Дисциплина{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="mb-1">{{ course.name }}</h2>
+    <p class="text-muted mb-0">Раздел дисциплины: лекции и материалы по неделям</p>
+  </div>
+  <a href="{% url 'teacher_courses' %}" class="btn btn-outline-secondary">К списку дисциплин</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">Загрузить материал</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          {% for field in lecture_form %}
+            {% if field.name != 'course' %}
+              <div class="mb-3">
+                <label class="form-label">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}
+                  <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% endfor %}
+          {{ lecture_form.course.as_hidden }}
+          <button class="btn btn-primary w-100" type="submit">Опубликовать</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">Лекции и материалы по неделям</h5>
+      </div>
+      <div class="card-body">
+        {% if grouped_weeks %}
+          {% for block in grouped_weeks %}
+            <div class="mb-4">
+              <h6 class="border-bottom pb-2">Неделя {{ block.week }}</h6>
+              <div class="list-group">
+                {% for lecture in block.lectures %}
+                  <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div>
+                        <div class="fw-semibold">{{ lecture.title }}</div>
+                        <div class="small text-muted">{{ lecture.created_at|date:"d.m.Y H:i" }}</div>
+                        {% if lecture.content_text %}
+                          <div class="small mt-1">{{ lecture.content_text|truncatechars:160 }}</div>
+                        {% endif %}
+                      </div>
+                      <div class="text-nowrap">
+                        {% if lecture.lecture_file %}
+                          <a href="{% url 'download_lecture_file' lecture.id %}" class="btn btn-sm btn-outline-primary">Файл</a>
+                        {% elif lecture.content_url %}
+                          <a href="{{ lecture.content_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">Ссылка</a>
+                        {% else %}
+                          <span class="badge bg-secondary">Текст</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="text-muted">Материалов по этой дисциплине пока нет.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

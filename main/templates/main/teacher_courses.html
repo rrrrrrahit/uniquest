@@ -1,14 +1,15 @@
 {% extends 'main/base.html' %}
-{% block title %}Мои курсы{% endblock %}
+{% block title %}Мои дисциплины{% endblock %}
 
 {% block content %}
 <div class="row">
   <div class="col-md-12">
-    <h2>Мои курсы</h2>
+    <h2>Мои дисциплины</h2>
     
-    {% if courses %}
+    {% if course_cards %}
       <div class="row g-4">
-        {% for course in courses %}
+        {% for row in course_cards %}
+          {% with course=row.course %}
           <div class="col-md-4">
             <div class="card">
               {% if course.image %}
@@ -17,21 +18,25 @@
               <div class="card-body">
                 <h5 class="card-title">{{ course.name }}</h5>
                 <p class="card-text">{{ course.description|truncatechars:100 }}</p>
-                {% if course.code %}
-                  <p class="card-text"><small class="text-muted">Код: {{ course.code }}</small></p>
-                {% endif %}
+                <p class="card-text"><small class="text-muted">Код: {{ course.code|default:"—" }}</small></p>
                 {% if course.subject %}
                   <p class="card-text"><small class="text-muted">Предмет: {{ course.subject.name_ru }}</small></p>
                 {% endif %}
-                <a href="{% url 'course_detail' course.pk %}" class="btn btn-primary btn-sm">Подробнее</a>
+                <p class="card-text"><small class="text-muted">Курс обучения: {{ row.course_years }}</small></p>
+                <p class="card-text mb-1"><small class="text-muted">Опубликовано материалов: {{ row.materials_count }}</small></p>
+                {% if row.latest_material %}
+                  <p class="card-text"><small class="text-muted">Последний материал: {{ row.latest_material.title }}</small></p>
+                {% endif %}
+                <a href="{% url 'teacher_discipline_detail' course.pk %}" class="btn btn-primary btn-sm">Открыть дисциплину</a>
               </div>
             </div>
           </div>
+          {% endwith %}
         {% endfor %}
       </div>
     {% else %}
       <div class="alert alert-info">
-        <p>У вас пока нет курсов. Обратитесь к администратору для добавления курсов.</p>
+        <p>У вас пока нет дисциплин. Обратитесь к администратору для добавления нагрузки.</p>
       </div>
     {% endif %}
   </div>

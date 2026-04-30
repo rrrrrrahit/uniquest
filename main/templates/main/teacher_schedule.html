@@ -4,36 +4,42 @@
 {% block content %}
 <div class="row">
   <div class="col-md-12">
-    <h2>Мое расписание</h2>
+    <h2>Расписание (сеткой)</h2>
     
-    {% if schedule %}
+    {% if grid %}
       <div class="table-responsive">
-        <table class="table table-striped">
+        <table class="table table-bordered align-middle">
           <thead>
             <tr>
-              <th>День недели</th>
-              <th>Время</th>
-              <th>Курс</th>
-              <th>Место</th>
-              <th>Группа</th>
+              <th style="min-width:120px;">Время</th>
+              {% for day in days %}
+                <th style="min-width:180px;">{{ day.1 }}</th>
+              {% endfor %}
             </tr>
           </thead>
           <tbody>
-            {% for entry in schedule %}
+            {% for row in grid %}
               <tr>
-                <td>{{ entry.get_weekday_display }}</td>
-                <td>{{ entry.start_time }} - {{ entry.end_time }}</td>
-                <td>{{ entry.course.name }}</td>
-                <td>{{ entry.classroom|default:"—" }}</td>
-                <td>
-                  {% for profile in entry.groups.all %}
-                    {% if profile.group %}
-                      {{ profile.group.name }}{% if not forloop.last %}, {% endif %}
-                    {% endif %}
-                  {% empty %}
-                    —
-                  {% endfor %}
-                </td>
+                <td class="fw-semibold">{{ row.time }}</td>
+                {% for cell in row.cells %}
+                  <td>
+                    {% for entry in cell %}
+                      <div class="mb-2 p-2 border rounded">
+                        <div class="fw-semibold">{{ entry.course.name }}</div>
+                        <div class="small text-muted">{{ entry.classroom|default:"—" }}</div>
+                        <div class="small">
+                          {% for profile in entry.groups.all %}
+                            {% if profile.group %}{{ profile.group.name }}{% if not forloop.last %}, {% endif %}{% endif %}
+                          {% empty %}
+                            —
+                          {% endfor %}
+                        </div>
+                      </div>
+                    {% empty %}
+                      <span class="text-muted small">—</span>
+                    {% endfor %}
+                  </td>
+                {% endfor %}
               </tr>
             {% endfor %}
           </tbody>

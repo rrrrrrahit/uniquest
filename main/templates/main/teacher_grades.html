@@ -1,40 +1,140 @@
 {% extends 'main/base.html' %}
-{% block title %}Оценки студентов{% endblock %}
+{% block title %}Оценивание и аналитика{% endblock %}
 
 {% block content %}
-<div class="row">
-  <div class="col-md-12">
-    <h2>Оценки студентов</h2>
-    
-    {% if grades %}
-      <div class="table-responsive">
-        <table class="table table-striped">
-          <thead>
-            <tr>
-              <th>Студент</th>
-              <th>Курс</th>
-              <th>Оценка</th>
-              <th>Дата</th>
-              <th>Примечание</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for grade in grades %}
-              <tr>
-                <td>{{ grade.student.get_full_name|default:grade.student.username }}</td>
-                <td>{{ grade.course.name }}</td>
-                <td><span class="badge bg-primary">{{ grade.value }} ({{ grade.letter_grade }})</span></td>
-                <td>{{ grade.date|date:"d.m.Y" }}</td>
-                <td>{{ grade.comment|default:"—" }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Фильтр</h5></div>
+      <div class="card-body">
+        <form method="get" class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Курс обучения (1-4)</label>
+            <select class="form-select" name="course_year">
+              <option value="">Все</option>
+              {% for y in "1234" %}
+                <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }} курс</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Группа</label>
+            <select class="form-select" name="group_id">
+              <option value="">Выберите группу</option>
+              {% for group in groups %}
+                <option value="{{ group.id }}" {% if selected_group_id == group.id|stringformat:"s" %}selected{% endif %}>{{ group.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Студент</label>
+            <select class="form-select" name="student_id">
+              <option value="">Выберите студента</option>
+              {% for st in students %}
+                <option value="{{ st.id }}" {% if selected_student_id == st.id|stringformat:"s" %}selected{% endif %}>{{ st.last_name }} {{ st.first_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Дата от</label>
+            <input type="date" class="form-control" name="date_from" value="{{ date_from }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Дата до</label>
+            <input type="date" class="form-control" name="date_to" value="{{ date_to }}">
+          </div>
+          <div class="col-12">
+            <button class="btn btn-outline-primary w-100" type="submit">Показать</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header"><h5 class="mb-0">Поставить балл/комментарий</h5></div>
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          {% for field in grade_entry_form %}
+            <div class="mb-2">
+              <label class="form-label">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <div class="text-danger small">{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+          <button class="btn btn-success w-100" type="submit">Сохранить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    {% if selected_student %}
+      <div class="card mb-3">
+        <div class="card-header">
+          <h5 class="mb-0">Студент: {{ selected_student.last_name }} {{ selected_student.first_name }}</h5>
+        </div>
+        <div class="card-body">
+          {% if student_report %}
+            <div class="row text-center">
+              <div class="col-md-4 mb-2">
+                <div class="border rounded p-2">
+                  <div class="small text-muted">Средний балл</div>
+                  <div class="fw-semibold">{{ student_report.overall_avg|floatformat:1 }}</div>
+                </div>
+              </div>
+              <div class="col-md-4 mb-2">
+                <div class="border rounded p-2">
+                  <div class="small text-muted">Посещаемость</div>
+                  <div class="fw-semibold">{{ student_report.overall_attendance|floatformat:1 }}%</div>
+                </div>
+              </div>
+              <div class="col-md-4 mb-2">
+                <div class="border rounded p-2">
+                  <div class="small text-muted">Риск</div>
+                  <div class="fw-semibold">{{ student_report.overall_risk_score }}</div>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h5 class="mb-0">Баллы по датам</h5></div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Дисциплина</th>
+                  <th>Балл</th>
+                  <th>Тема</th>
+                  <th>Комментарий</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for grade in student_grades %}
+                  <tr>
+                    <td>{{ grade.date|date:"d.m.Y" }}</td>
+                    <td>{{ grade.course.name }}</td>
+                    <td>{{ grade.value }}</td>
+                    <td>{{ grade.topic|default:"—" }}</td>
+                    <td>{{ grade.comment|default:"—" }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="5" class="text-muted">Нет оценок за выбранный период.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     {% else %}
-      <div class="alert alert-info">
-        <p>Оценок пока нет.</p>
-      </div>
+      <div class="alert alert-info">Выберите курс обучения, группу и студента для просмотра аналитики и выставления баллов.</div>
     {% endif %}
   </div>
 </div>

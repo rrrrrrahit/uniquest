@@ -32,6 +32,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunSQL(
+            sql=(
+                "UPDATE main_profile "
+                "SET group_id = NULL "
+                "WHERE TRIM(CAST(group_id AS TEXT)) = '';"
+            ),
+            reverse_sql=migrations.RunSQL.noop,
+        ),
         migrations.AddField(
             model_name="group",
             name="course_year",

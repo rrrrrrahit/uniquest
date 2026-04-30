@@ -5,13 +5,6 @@ from django.db import migrations
 def seed_render_test_accounts(apps, schema_editor):
     User = apps.get_model("auth", "User")
     Profile = apps.get_model("main", "Profile")
-    # Legacy Render SQLite may contain invalid empty-string FK values.
-    # Clean them before any further migration constraint checks.
-    schema_editor.execute(
-        "UPDATE main_profile "
-        "SET group_id = NULL "
-        "WHERE TRIM(CAST(group_id AS TEXT)) = '';"
-    )
 
     accounts = [
         {
@@ -71,6 +64,15 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunSQL(
+            sql=(
+                "UPDATE main_profile "
+                "SET group_id = NULL "
+                "WHERE group_id IS NOT NULL "
+                "AND group_id NOT IN (SELECT id FROM main_group);"
+            ),
+            reverse_sql=migrations.RunSQL.noop,
+        ),
         migrations.RunPython(seed_render_test_accounts, migrations.RunPython.noop),
     ]
 

@@ -57,49 +57,22 @@
       </div>
       <div class="card-body">
         {% if trajectory %}
-        <div class="table-responsive">
-          <table class="table mb-0">
-            <thead>
-              <tr>
-                <th>Дисциплина</th>
-                <th>Средний балл</th>
-                <th>Посещаемость</th>
-                <th>Сдача заданий</th>
-                <th>Тренд</th>
-                <th>Риск</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in trajectory %}
-              <tr>
-                <td><strong>{{ item.course.name }}</strong></td>
-                <td>{{ item.avg_grade|floatformat:1 }}</td>
-                <td>{{ item.attendance_rate|floatformat:1 }}%</td>
-                <td>{{ item.submission_rate|floatformat:1 }}%</td>
-                <td>
-                  {% if item.trend >= 0 %}
-                  <span class="text-success">+{{ item.trend|floatformat:1 }}</span>
-                  {% else %}
-                  <span class="text-danger">{{ item.trend|floatformat:1 }}</span>
-                  {% endif %}
-                </td>
-                <td>
-                  <span class="badge
-                    {% if item.risk_level == 'critical' %}bg-danger
-                    {% elif item.risk_level == 'high' %}bg-warning text-dark
-                    {% elif item.risk_level == 'medium' %}bg-info text-dark
-                    {% else %}bg-success{% endif %}">
-                    {% if item.risk_level == 'critical' %}Критический
-                    {% elif item.risk_level == 'high' %}Высокий
-                    {% elif item.risk_level == 'medium' %}Средний
-                    {% else %}Низкий{% endif %}
+          <div class="list-group">
+            {% for item in trajectory %}
+              <a href="{% url 'student_passport' %}?course_id={{ item.course.id }}"
+                 class="list-group-item list-group-item-action {% if selected_course_report and selected_course_report.course.id == item.course.id %}active{% endif %}">
+                <div class="d-flex justify-content-between align-items-center">
+                  <strong>{{ item.course.name }}</strong>
+                  <span class="badge {% if selected_course_report and selected_course_report.course.id == item.course.id %}bg-light text-dark{% elif item.risk_level == 'critical' %}bg-danger{% elif item.risk_level == 'high' %}bg-warning text-dark{% elif item.risk_level == 'medium' %}bg-info text-dark{% else %}bg-success{% endif %}">
+                    {{ item.risk_level|upper }}
                   </span>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+                </div>
+                <div class="small {% if selected_course_report and selected_course_report.course.id == item.course.id %}text-white-50{% else %}text-muted{% endif %}">
+                  Средний балл: {{ item.avg_grade|floatformat:1 }}, посещаемость: {{ item.attendance_rate|floatformat:1 }}%, сдача: {{ item.submission_rate|floatformat:1 }}%
+                </div>
+              </a>
+            {% endfor %}
+          </div>
         {% else %}
         <p class="text-muted mb-0">Недостаточно данных для траектории.</p>
         {% endif %}
@@ -107,6 +80,75 @@
     </div>
   </div>
 </div>
+
+{% if selected_course_report %}
+<div class="card mb-4">
+  <div class="card-header">
+    <h5 class="mb-0">Детальный анализ: {{ selected_course_report.course.name }}</h5>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-3"><div class="border rounded p-2 text-center"><div class="small text-muted">Средний балл</div><div class="fw-semibold">{{ selected_course_report.avg_grade|floatformat:1 }}</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-2 text-center"><div class="small text-muted">Посещаемость (САПА)</div><div class="fw-semibold">{{ selected_course_report.attendance_rate|floatformat:1 }}%</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-2 text-center"><div class="small text-muted">Сдача заданий</div><div class="fw-semibold">{{ selected_course_report.submission_rate|floatformat:1 }}%</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-2 text-center"><div class="small text-muted">Риск-скор</div><div class="fw-semibold">{{ selected_course_report.risk_score }}</div></div></div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <h6>Сильные стороны</h6>
+        {% if selected_course_report.strengths %}
+          <ul class="small mb-0 ps-3">{% for item in selected_course_report.strengths %}<li>{{ item.topic }} ({{ item.avg|floatformat:1 }})</li>{% endfor %}</ul>
+        {% else %}<div class="small text-muted">Пока не выделены.</div>{% endif %}
+      </div>
+      <div class="col-md-4">
+        <h6>Слабые стороны</h6>
+        {% if selected_course_report.weaknesses %}
+          <ul class="small mb-0 ps-3">{% for item in selected_course_report.weaknesses %}<li>{{ item.topic }} ({{ item.avg|floatformat:1 }})</li>{% endfor %}</ul>
+        {% else %}<div class="small text-muted">Критичных тем нет.</div>{% endif %}
+      </div>
+      <div class="col-md-4">
+        <h6>Угрозы и триггеры</h6>
+        {% if selected_course_report.risk_indicators %}
+          <ul class="small mb-0 ps-3">{% for row in selected_course_report.risk_indicators %}<li>{{ row }}</li>{% endfor %}</ul>
+        {% else %}<div class="small text-muted">Явных триггеров не найдено.</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <h6>Комментарий(и) преподавателя</h6>
+      {% if selected_course_report.teacher_comments %}
+        <ul class="small mb-0 ps-3">
+          {% for note in selected_course_report.teacher_comments %}
+            <li>{{ note }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="small text-muted">По этой дисциплине пока нет комментариев преподавателя.</div>
+      {% endif %}
+    </div>
+
+    <h6>Баллы и комментарии преподавателя по датам</h6>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Дата</th><th>Балл</th><th>Тема</th><th>Комментарий</th></tr></thead>
+        <tbody>
+          {% for g in selected_course_grades %}
+            <tr>
+              <td>{{ g.date|date:"d.m.Y" }}</td>
+              <td>{{ g.value }}</td>
+              <td>{{ g.topic|default:"—" }}</td>
+              <td>{{ g.comment|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">По этой дисциплине пока нет оценок.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="row mb-4">
   <div class="col-md-4 mb-3">

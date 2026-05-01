@@ -118,89 +118,44 @@
         <div class="alert alert-info text-center">
           <i class="fas fa-info-circle fa-2x mb-3"></i>
           <h5>Ничего не найдено</h5>
-          <p>Попробуйте изменить запрос или использовать другие ключевые слова.</p>
+          <p>Попробуйте другие слова из темы лекции или названия дисциплины.</p>
+          <p class="mb-0 small text-muted">Поиск выполняется только по материалам, которые загрузили преподаватели и к которым у вас есть доступ.</p>
         </div>
       {% endif %}
     </div>
   </div>
 {% else %}
-  {% if focus_areas %}
-    <div class="row mb-4">
-      <div class="col-12">
-        <h3 class="mb-3">
-          <i class="fas fa-crosshairs me-2 text-danger"></i>Рекомендуемые зоны проработки:
-        </h3>
+  <div class="row mb-4">
+    <div class="col-12">
+      <h3 class="mb-3"><i class="fas fa-folder-open me-2 text-primary"></i>Доступные материалы ваших дисциплин</h3>
+      {% if recent_materials %}
         <div class="row g-3">
-          {% for area in focus_areas %}
+          {% for lecture in recent_materials %}
             <div class="col-md-6">
-              <div class="card h-100 border-danger-subtle">
-                <div class="card-body">
-                  <h6 class="mb-1">{{ area.title }}</h6>
-                  <p class="small text-muted mb-2">{{ area.hint }}</p>
-                  <a href="{% url 'ai_assistant' %}?q={{ area.query|urlencode }}" class="btn btn-sm btn-outline-danger">
-                    <i class="fas fa-search me-1"></i>Найти материалы
-                  </a>
-                </div>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-  {% endif %}
-
-  <!-- Предлагаемые вопросы -->
-  {% if suggested_questions %}
-    <div class="row mb-4">
-      <div class="col-12">
-        <h3 class="mb-3">
-          <i class="fas fa-lightbulb me-2 text-warning"></i>Попробуйте спросить:
-        </h3>
-        <div class="row g-3">
-          {% for question in suggested_questions %}
-            <div class="col-md-6">
-              <div class="card h-100 hover-shadow">
-                <div class="card-body">
-                  <p class="card-text mb-0">{{ question }}</p>
-                  <a href="{% url 'ai_assistant' %}?q={{ question|urlencode }}" class="btn btn-sm btn-outline-primary mt-2">
-                    <i class="fas fa-search me-1"></i>Найти ответ
-                  </a>
-                </div>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-  {% endif %}
-  
-  <!-- Популярные вопросы по специальности -->
-  {% if popular_questions %}
-    <div class="row mb-4">
-      <div class="col-12">
-        <h3 class="mb-3">
-          <i class="fas fa-star me-2 text-warning"></i>Популярные вопросы по вашей специальности:
-        </h3>
-        <div class="row g-3">
-          {% for question in popular_questions %}
-            <div class="col-md-4">
               <div class="card h-100">
-                <div class="card-body text-center">
-                  <i class="fas {{ question.icon }} fa-2x text-primary mb-3"></i>
-                  <p class="card-text">{{ question.text }}</p>
-                  <a href="{% url 'ai_assistant' %}?q={{ question.text|urlencode }}" class="btn btn-sm btn-primary">
-                    <i class="fas fa-search me-1"></i>Найти
-                  </a>
+                <div class="card-body">
+                  <h6 class="mb-1">{{ lecture.title }}</h6>
+                  <div class="small text-muted mb-2">{{ lecture.course.name }}</div>
+                  <p class="small">{{ lecture.content_text|default:"Материал в виде файла или ссылки."|truncatechars:140 }}</p>
+                  <div>
+                    <a href="{% url 'lecture_detail' lecture.id %}" class="btn btn-sm btn-outline-primary">Открыть</a>
+                    {% if lecture.lecture_file %}
+                      <a href="{% url 'download_lecture_file' lecture.id %}" class="btn btn-sm btn-outline-success">Скачать</a>
+                    {% elif lecture.content_url %}
+                      <a href="{{ lecture.content_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-success">Ссылка</a>
+                    {% endif %}
+                  </div>
                 </div>
               </div>
             </div>
           {% endfor %}
         </div>
-      </div>
+      {% else %}
+        <div class="alert alert-info">Преподаватели еще не загрузили материалы в доступные вам дисциплины.</div>
+      {% endif %}
     </div>
-  {% endif %}
-  
-  <!-- Информация о функциях -->
+  </div>
+
   <div class="row">
     <div class="col-12">
       <div class="card bg-light">
@@ -213,8 +168,8 @@
               <div class="d-flex align-items-start">
                 <i class="fas fa-brain fa-2x text-primary me-3"></i>
                 <div>
-                  <h6>Семантический поиск</h6>
-                  <p class="small text-muted mb-0">Использует искусственный интеллект для понимания смысла вашего вопроса</p>
+                  <h6>Поиск по реальным материалам</h6>
+                  <p class="small text-muted mb-0">Выдача строится на файлах, ссылках и текстах, загруженных преподавателями</p>
                 </div>
               </div>
             </div>
@@ -231,8 +186,8 @@
               <div class="d-flex align-items-start">
                 <i class="fas fa-graduation-cap fa-2x text-info me-3"></i>
                 <div>
-                  <h6>По специальности</h6>
-                  <p class="small text-muted mb-0">Предлагает вопросы, релевантные вашей специальности</p>
+                  <h6>Прямая навигация</h6>
+                  <p class="small text-muted mb-0">Открывайте материал или скачивайте файл прямо из результатов</p>
                 </div>
               </div>
             </div>
@@ -242,15 +197,5 @@
     </div>
   </div>
 {% endif %}
-
-<style>
-  .hover-shadow {
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .hover-shadow:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
-  }
-</style>
 {% endblock %}
 

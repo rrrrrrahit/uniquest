@@ -4,34 +4,73 @@
 <div class="row mb-4 reveal">
   <div class="col-12">
     <h2 class="mb-1">Успеваемость</h2>
-    <p class="text-muted mb-0">Все оценки в хронологическом порядке и разрезе дисциплин.</p>
+    <p class="text-muted mb-0">Выберите дисциплину и просматривайте баллы по датам с комментариями преподавателя.</p>
   </div>
 </div>
-<div class="card reveal">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-striped mb-0">
-        <thead>
-          <tr>
-            <th>Курс</th>
-            <th>Оценка</th>
-            <th>Дата</th>
-            <th>Примечание</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for g in grades %}
-            <tr>
-              <td><a href="{% url 'course_detail' g.course.pk %}">{{ g.course.name }}</a></td>
-              <td><span class="badge {% if g.value >= 90 %}bg-success{% elif g.value >= 80 %}bg-info{% elif g.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">{{ g.value }} ({{ g.letter_grade }})</span></td>
-              <td>{{ g.date|date:"d.m.Y" }}</td>
-              <td>{{ g.comment|default:"—" }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="4" class="text-muted">Оценок пока нет.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card reveal">
+      <div class="card-header"><h5 class="mb-0">Дисциплины</h5></div>
+      <div class="list-group list-group-flush">
+        {% for item in courses_stats %}
+          <a href="{% url 'grades' %}?course_id={{ item.course.id }}"
+             class="list-group-item list-group-item-action {% if selected_course and selected_course.id == item.course.id %}active{% endif %}">
+            <div class="d-flex justify-content-between align-items-center">
+              <span>{{ item.course.name }}</span>
+              <span class="badge {% if selected_course and selected_course.id == item.course.id %}bg-light text-dark{% else %}bg-primary{% endif %}">
+                {{ item.avg|floatformat:1 }}
+              </span>
+            </div>
+            <small class="{% if selected_course and selected_course.id == item.course.id %}text-white-50{% else %}text-muted{% endif %}">
+              Оценок: {{ item.grades|length }}
+            </small>
+          </a>
+        {% empty %}
+          <div class="list-group-item text-muted">Оценок пока нет.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card reveal">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">{% if selected_course %}{{ selected_course.name }}{% else %}Выберите дисциплину{% endif %}</h5>
+        {% if selected_course %}
+          <a href="{% url 'course_detail' selected_course.id %}" class="btn btn-sm btn-outline-primary">Открыть дисциплину</a>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        {% if selected_course %}
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Балл</th>
+                  <th>Тема</th>
+                  <th>Комментарий преподавателя</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for g in selected_course_grades %}
+                  <tr>
+                    <td>{{ g.date|date:"d.m.Y" }}</td>
+                    <td><span class="badge {% if g.value >= 90 %}bg-success{% elif g.value >= 80 %}bg-info{% elif g.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">{{ g.value }} ({{ g.letter_grade }})</span></td>
+                    <td>{{ g.topic|default:"—" }}</td>
+                    <td>{{ g.comment|default:"—" }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="4" class="text-muted">По дисциплине пока нет оценок.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="p-4 text-muted">Выберите дисциплину слева, чтобы открыть детальный журнал по датам.</div>
+        {% endif %}
+      </div>
     </div>
   </div>
 </div>

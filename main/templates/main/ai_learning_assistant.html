@@ -59,11 +59,15 @@
     {% for course in student_courses %}
     <div class="col-lg-6 reveal">
       <div class="card h-100">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header">
           <h5 class="mb-0">{{ course.name }}</h5>
-          <button class="btn btn-sm btn-outline-primary js-toggle" data-target="course-block-{{ course.id }}">Детали</button>
         </div>
-        <div class="card-body" id="course-block-{{ course.id }}">
+        <div class="card-body pb-0">
+          <p class="text-muted small mb-0">Выберите раздел ниже: прогноз, план подготовки, рекомендации.</p>
+        </div>
+        <div class="card-body">
+          <details open>
+            <summary class="fw-semibold mb-3">Детали по дисциплине</summary>
           {% with prediction=exam_predictions|get_item:course.id %}
           {% if prediction %}
           <div class="row g-2 mb-3">
@@ -124,8 +128,11 @@
               <div class="small">{{ rec.text }}</div>
             </div>
             {% endfor %}
+          {% else %}
+            <div class="text-muted small">Рекомендаций пока недостаточно — появятся после накопления оценок и посещаемости.</div>
           {% endif %}
           {% endwith %}
+          </details>
         </div>
       </div>
     </div>
@@ -137,16 +144,4 @@
   </div>
   {% endif %}
 </div>
-{% endblock %}
-
-{% block extra_scripts %}
-<script>
-  document.querySelectorAll(".js-toggle").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = document.getElementById(btn.dataset.target);
-      target.classList.toggle("d-none");
-      btn.textContent = target.classList.contains("d-none") ? "Развернуть" : "Свернуть";
-    });
-  });
-</script>
 {% endblock %}

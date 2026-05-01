@@ -986,6 +986,14 @@ def build_student_performance_report(student_user, teacher=None):
         grades = list(
             Grade.objects.filter(student=student_user, course=course).order_by("date")
         )
+        teacher_comments = [
+            row.comment.strip()
+            for row in Grade.objects.filter(student=student_user, course=course)
+            .exclude(comment__isnull=True)
+            .exclude(comment__exact="")
+            .order_by("-date")[:5]
+            if row.comment and row.comment.strip()
+        ]
         grade_values = [float(g.value) for g in grades]
         avg_grade = (sum(grade_values) / len(grade_values)) if grade_values else 0.0
         recent_slice = grade_values[-3:] if grade_values else []
@@ -1166,6 +1174,14 @@ def build_student_performance_report(student_user, teacher=None):
 
         if indicators:
             risk_triggers.append({"course": course, "items": indicators, "level": risk_level})
+        if teacher_comments:
+            risk_triggers.append(
+                {
+                    "course": course,
+                    "items": [f"Комментарий преподавателя: {text}" for text in teacher_comments[:2]],
+                    "level": risk_level,
+                }
+            )
 
         course_reports.append(
             {
@@ -1185,6 +1201,7 @@ def build_student_performance_report(student_user, teacher=None):
                 "data_confidence": data_confidence,
                 "strengths": course_strengths[:3],
                 "weaknesses": course_weaknesses[:3],
+                "teacher_comments": teacher_comments,
             }
         )
         course_weight = max(1.0, float(course.credits or 1))
@@ -1487,6 +1504,19 @@ def student_passport_view(request):
         }
         for item in report["course_reports"]
     ]
+    selected_course_id = request.GET.get("course_id", "").strip()
+    selected_course_report = None
+    selected_course_grades = Grade.objects.none()
+    if selected_course_id.isdigit():
+        selected_course_report = next(
+            (item for item in report["course_reports"] if item["course"].id == int(selected_course_id)),
+            None,
+        )
+        if selected_course_report:
+            selected_course_grades = Grade.objects.filter(
+                student=request.user,
+                course=selected_course_report["course"],
+            ).order_by("-date")
 
     return render(
         request,
@@ -1504,6 +1534,9 @@ def student_passport_view(request):
             "top_weaknesses": report["top_weaknesses"],
             "threats": report["threats"],
             "recommendations": report["recommendations"],
+            "selected_course_id": selected_course_id,
+            "selected_course_report": selected_course_report,
+            "selected_course_grades": selected_course_grades,
         },
     )
 
@@ -1584,37 +1617,70 @@ def schedule_view(request):
         .distinct()
         .order_by("weekday", "start_time")
     )
+    days = [
+        (0, "Понедельник"),
+        (1, "Вторник"),
+        (2, "Среда"),
+        (3, "Четверг"),
+        (4, "Пятница"),
+        (5, "Суббота"),
+    ]
+    time_slots = sorted({(str(item.start_time), str(item.end_time)) for item in schedule})
+    grid = []
+    for start, end in time_slots:
+        row = {"time": f"{start} - {end}", "cells": []}
+        for day_idx, _ in days:
+            items = [
+                e for e in schedule
+                if e.weekday == day_idx and str(e.start_time) == start and str(e.end_time) == end
+            ]
+            row["cells"].append(items)
+        grid.append(row)
 
-    return render(request, 'main/schedule.html', {'schedule': schedule})
+    return render(
+        request,
+        'main/schedule.html',
+        {'schedule': schedule, 'days': days, 'grid': grid},
+    )
 
 @login_required
 @student_required
 def grades_view(request):
     user = request.user
     grades = Grade.objects.filter(student=user).select_related('course', 'assignment').order_by('-date')
-    
-    # Статистика
+    selected_course_id = request.GET.get("course_id", "").strip()
     total_grades = grades.count()
     avg_score = grades.aggregate(avg=Avg('value'))['avg'] or 0
     courses_stats = {}
-    
+
     for grade in grades:
         if grade.course.id not in courses_stats:
             courses_stats[grade.course.id] = {
                 'course': grade.course,
                 'grades': [],
-                'avg': 0
+                'avg': 0,
             }
-        courses_stats[grade.course.id]['grades'].append(grade.value)
-    
+        courses_stats[grade.course.id]['grades'].append(grade)
+
     for course_id, stats in courses_stats.items():
-        stats['avg'] = sum(stats['grades']) / len(stats['grades'])
-    
+        numeric = [float(g.value) for g in stats['grades']]
+        stats['avg'] = (sum(numeric) / len(numeric)) if numeric else 0
+        stats['grades'] = sorted(stats['grades'], key=lambda g: g.date, reverse=True)
+
+    selected_course = None
+    selected_course_grades = Grade.objects.none()
+    if selected_course_id.isdigit() and int(selected_course_id) in courses_stats:
+        selected_course = courses_stats[int(selected_course_id)]["course"]
+        selected_course_grades = grades.filter(course_id=selected_course.id).order_by("-date")
+
     return render(request, 'main/grades.html', {
         'grades': grades,
         'total_grades': total_grades,
         'avg_score': avg_score,
-        'courses_stats': courses_stats.values(),
+        'courses_stats': sorted(courses_stats.values(), key=lambda x: x["course"].name),
+        'selected_course_id': selected_course_id,
+        'selected_course': selected_course,
+        'selected_course_grades': selected_course_grades,
     })
 
 @login_required
@@ -1646,21 +1712,16 @@ def ai_assistant(request):
         search_results = []
         suggested_questions = []
         focus_areas = []
+        recent_materials = []
 
-        # Персональные фокусы: слабые темы и курсы с риском.
-        performance_report = build_student_performance_report(user)
-        for weak in performance_report.get("top_weaknesses", [])[:4]:
-            focus_areas.append(
-                {
-                    "title": f"Тема: {weak['topic']}",
-                    "query": weak["topic"],
-                    "hint": f"Средний балл по теме: {weak['avg']:.1f}",
-                }
+        if user_courses:
+            recent_materials = list(
+                _recent_materials_queryset(Lecture.objects.filter(course__in=user_courses))[:12]
             )
-        
+
         if query:
             try:
-                # Семантический поиск по всем лекциям
+                # Семантический поиск по реальным материалам
                 all_results = semantic_search(query, top_k=10)
                 
                 # Загружаем объекты лекций для результатов
@@ -1676,18 +1737,27 @@ def ai_assistant(request):
                         except Exception:
                             pass
                 
-                # Строго ограничиваем результаты только доступными курсами пользователя.
+                # Строго ограничиваем результаты доступными курсами и только реальными материалами.
                 if user_courses:
                     course_ids = {c.id for c in user_courses if c and hasattr(c, 'id')}
                     for result in all_results:
                         lecture = result.get('lecture')
-                        if lecture and getattr(lecture, "course_id", None) in course_ids:
+                        if (
+                            lecture
+                            and getattr(lecture, "course_id", None) in course_ids
+                            and (
+                                getattr(lecture, "lecture_file", None)
+                                or getattr(lecture, "content_url", "")
+                                or getattr(lecture, "content_text", "")
+                            )
+                        ):
                             search_results.append(result)
                     search_results = search_results[:10]
                 elif is_teacher:
                     search_results = []
                 else:
-                    search_results = all_results[:10]
+                    # Для студента без записей на дисциплины выдача должна быть пустой.
+                    search_results = []
 
                 if not search_results:
                     # Надёжный fallback на keyword-поиск по лекциям и курсам.
@@ -1720,35 +1790,8 @@ def ai_assistant(request):
                 search_results = []
                 messages.warning(request, 'Поиск временно недоступен. Попробуйте позже.')
         else:
-            # Предлагаем вопросы с учетом роли
-            if is_teacher:
-                suggested_questions = [
-                    "Материалы по моим курсам за последний месяц",
-                    "Темы, где у студентов больше всего ошибок",
-                    "Ресурсы для подготовки к промежуточному контролю",
-                ]
-            elif specialty and hasattr(specialty, 'name_ru'):
-                suggested_questions = [
-                    f"Что изучают на специальности {specialty.name_ru}?",
-                    f"Какие предметы входят в программу {specialty.name_ru}?",
-                    f"Основные темы специальности {specialty.name_ru}",
-                ]
-            else:
-                suggested_questions = [
-                    "Что такое программирование?",
-                    "Основы баз данных",
-                    "Веб-разработка для начинающих",
-                    "Алгоритмы и структуры данных",
-                ]
-        
-        # Популярные вопросы по специальности
+            suggested_questions = []
         popular_questions = []
-        if specialty and hasattr(specialty, 'name_ru'):
-            popular_questions = [
-                {"text": f"Какие навыки нужны для {specialty.name_ru}?", "icon": "fa-lightbulb"},
-                {"text": f"Карьерные возможности в {specialty.name_ru}", "icon": "fa-briefcase"},
-                {"text": f"Сложные темы в {specialty.name_ru}", "icon": "fa-graduation-cap"},
-            ]
         
         return render(request, 'main/ai_assistant.html', {
             'query': query,
@@ -1759,6 +1802,7 @@ def ai_assistant(request):
             'student_courses': user_courses,
             'focus_areas': focus_areas,
             'is_teacher': is_teacher,
+            'recent_materials': recent_materials,
         })
     except Exception as e:
         # Общая обработка ошибок
@@ -1779,6 +1823,7 @@ def ai_assistant(request):
             'student_courses': [],
             'focus_areas': [],
             'is_teacher': False,
+            'recent_materials': [],
         })
 
 

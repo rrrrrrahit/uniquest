@@ -1,4 +1,5 @@
 {% extends 'main/base.html' %}
+{% load dict_filters %}
 {% block title %}{{ course.name }}{% endblock %}
 {% block content %}
 <div class="row mb-4 reveal">
@@ -23,6 +24,42 @@
             </li>
           {% empty %}
             <li class="list-group-item text-muted">Оценок нет</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="card mt-4">
+      <div class="card-header"><h5 class="mb-0">Тесты по материалам курса</h5></div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for quiz in quizzes %}
+            <li class="list-group-item d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold">{{ quiz.title }}</div>
+                <div class="small text-muted">
+                  Вопросов: {{ quiz.question_count }} · Дедлайн: {{ quiz.assignment.due_date|date:"d.m.Y H:i" }}
+                </div>
+                {% if quiz.lecture %}
+                  <div class="small text-muted">Источник: {{ quiz.lecture.title }}</div>
+                {% endif %}
+                {% if not is_teacher_view and student_attempts|get_item:quiz.id %}
+                  <div class="small text-success">
+                    Ваш результат: {{ student_attempts|get_item:quiz.id }}%
+                  </div>
+                {% endif %}
+              </div>
+              <div class="text-nowrap">
+                {% if is_teacher_view %}
+                  <span class="badge bg-secondary">Для студентов</span>
+                {% else %}
+                  <a href="{% url 'take_quiz' quiz.id %}" class="btn btn-sm btn-primary">
+                    {% if student_attempts|get_item:quiz.id %}Перепройти{% else %}Пройти тест{% endif %}
+                  </a>
+                {% endif %}
+              </div>
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">Тесты пока не созданы.</li>
           {% endfor %}
         </ul>
       </div>

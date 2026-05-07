@@ -130,6 +130,80 @@ class Assignment(models.Model):
     def __str__(self):
         return f"{self.course.name} - {self.title}"
 
+
+class LectureQuiz(models.Model):
+    """
+    Тест, автоматически сгенерированный на основе лекции/текста.
+    """
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="lecture_quizzes")
+    lecture = models.ForeignKey(
+        "Lecture",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generated_quizzes",
+    )
+    assignment = models.OneToOneField(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="lecture_quiz",
+    )
+    title = models.CharField(max_length=200)
+    source_text = models.TextField(blank=True)
+    generated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    question_count = models.PositiveIntegerField(default=5)
+    max_attempts = models.PositiveIntegerField(default=1)
+    time_limit_minutes = models.PositiveIntegerField(default=20)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Тест по лекции"
+        verbose_name_plural = "Тесты по лекциям"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.course.name} — {self.title}"
+
+
+class LectureQuizQuestion(models.Model):
+    quiz = models.ForeignKey(LectureQuiz, on_delete=models.CASCADE, related_name="questions")
+    question_text = models.TextField()
+    option_a = models.CharField(max_length=500)
+    option_b = models.CharField(max_length=500)
+    option_c = models.CharField(max_length=500)
+    option_d = models.CharField(max_length=500)
+    correct_option = models.CharField(
+        max_length=1,
+        choices=[("A", "A"), ("B", "B"), ("C", "C"), ("D", "D")],
+    )
+    order = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        verbose_name = "Вопрос теста"
+        verbose_name_plural = "Вопросы теста"
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"Q{self.order}: {self.question_text[:60]}"
+
+
+class LectureQuizAttempt(models.Model):
+    quiz = models.ForeignKey(LectureQuiz, on_delete=models.CASCADE, related_name="attempts")
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name="lecture_quiz_attempts")
+    score = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    total_questions = models.PositiveIntegerField(default=0)
+    answers = models.JSONField(default=dict, blank=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Попытка теста"
+        verbose_name_plural = "Попытки тестов"
+        ordering = ["-submitted_at"]
+
+    def __str__(self):
+        return f"{self.student.username} — {self.quiz.title} ({self.score})"
+
 # ----------------- Submission -----------------
 class Submission(models.Model):
     assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE, related_name='submissions')

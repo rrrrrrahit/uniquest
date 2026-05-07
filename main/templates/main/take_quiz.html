@@ -1,0 +1,66 @@
+{% extends 'main/base.html' %}
+{% load dict_filters %}
+{% block title %}{{ quiz.title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">{{ quiz.title }}</h4>
+        <a href="{% url 'course_detail' quiz.course.id %}" class="btn btn-sm btn-outline-secondary">Назад к курсу</a>
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-2">Курс: {{ quiz.course.name }} · Вопросов: {{ questions|length }}</p>
+        <div class="alert alert-light border d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <strong>Осталось попыток:</strong> {{ attempts_left }}
+            <span class="mx-2">•</span>
+            <strong>Лимит времени:</strong> {{ quiz.time_limit_minutes }} мин
+          </div>
+          <div><strong id="quiz-timer">{{ quiz.time_limit_minutes }}:00</strong></div>
+        </div>
+        <form method="post">
+          {% csrf_token %}
+          {% for q in questions %}
+            <div class="mb-4 p-3 border rounded">
+              <div class="fw-semibold mb-2">{{ forloop.counter }}. {{ q.question_text }}</div>
+              {% for opt in options_by_question|get_item:q.id %}
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="radio" name="q_{{ q.id }}" id="q{{ q.id }}{{ opt.0|lower }}" value="{{ opt.0 }}" {% if forloop.first %}required{% endif %}>
+                  <label class="form-check-label" for="q{{ q.id }}{{ opt.0|lower }}">{{ opt.1 }}</label>
+                </div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+          <button type="submit" class="btn btn-primary">Завершить тест и сохранить оценку</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+  (function () {
+    const timerEl = document.getElementById("quiz-timer");
+    if (!timerEl) return;
+    let remaining = {{ quiz.time_limit_minutes|default:20 }} * 60;
+    const interval = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        timerEl.textContent = "00:00";
+        clearInterval(interval);
+        const form = document.querySelector("form");
+        if (form) form.submit();
+        return;
+      }
+      const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
+      const ss = String(remaining % 60).padStart(2, "0");
+      timerEl.textContent = `${mm}:${ss}`;
+    }, 1000);
+  })();
+</script>
+{% endblock %}

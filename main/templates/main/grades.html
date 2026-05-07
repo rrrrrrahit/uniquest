@@ -72,6 +72,257 @@
         {% endif %}
       </div>
     </div>
+
+    {% if selected_course %}
+    <div class="card mt-4 reveal">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Калькулятор итоговой оценки (KZ формат)</h5>
+        <span class="badge bg-primary">РК1 / РК2 / Сессия</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Модель по умолчанию: <strong>Допуск</strong> = ТК×0.30 + РК1×0.35 + РК2×0.35;
+          <strong>Итог</strong> = Допуск×0.60 + Экзамен×0.40.
+          Вы можете менять веса под правила конкретной дисциплины.
+        </p>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Текущий контроль (ТК)</label>
+            <input type="number" class="form-control form-control-sm calc-input" id="calc-tk" min="0" max="100" step="0.1" value="{{ calculator_defaults.tk|floatformat:1 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Рубежный контроль 1 (РК1)</label>
+            <input type="number" class="form-control form-control-sm calc-input" id="calc-rk1" min="0" max="100" step="0.1" value="{{ calculator_defaults.rk1|floatformat:1 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Рубежный контроль 2 (РК2)</label>
+            <input type="number" class="form-control form-control-sm calc-input" id="calc-rk2" min="0" max="100" step="0.1" value="{{ calculator_defaults.rk2|floatformat:1 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Экзамен / сессия</label>
+            <input type="number" class="form-control form-control-sm calc-input" id="calc-exam" min="0" max="100" step="0.1" value="{{ calculator_defaults.exam|floatformat:1 }}">
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            id="fill-factual-btn"
+            data-tk="{{ calculator_defaults.tk|floatformat:1 }}"
+            data-rk1="{{ calculator_defaults.rk1|floatformat:1 }}"
+            data-rk2="{{ calculator_defaults.rk2|floatformat:1 }}"
+            data-exam="{{ calculator_defaults.exam|floatformat:1 }}"
+            {% if not calculator_defaults.has_factual_data %}disabled{% endif %}
+          >
+            Подставить мои фактические данные
+          </button>
+          <small class="text-muted">
+            {% if calculator_defaults.has_factual_data %}
+            Значения рассчитаны автоматически по вашему журналу.
+            {% else %}
+            В журнале пока мало данных по РК/экзамену — используйте ручной ввод.
+            {% endif %}
+          </small>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label small mb-1">Вес ТК в допуске (%)</label>
+            <input type="number" class="form-control form-control-sm calc-weight" id="w-tk" min="0" max="100" step="1" value="30">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small mb-1">Вес РК1 в допуске (%)</label>
+            <input type="number" class="form-control form-control-sm calc-weight" id="w-rk1" min="0" max="100" step="1" value="35">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small mb-1">Вес РК2 в допуске (%)</label>
+            <input type="number" class="form-control form-control-sm calc-weight" id="w-rk2" min="0" max="100" step="1" value="35">
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Вес допуска в финале (%)</label>
+            <input type="number" class="form-control form-control-sm calc-final" id="w-admission" min="0" max="100" step="1" value="60">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Вес экзамена в финале (%)</label>
+            <input type="number" class="form-control form-control-sm calc-final" id="w-exam" min="0" max="100" step="1" value="40">
+          </div>
+        </div>
+
+        <div class="alert alert-light border mb-3">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="small text-muted">Допуск к сессии</div>
+              <div class="h5 mb-0" id="admission-score">0.0</div>
+            </div>
+            <div class="col-md-4">
+              <div class="small text-muted">Итоговый балл</div>
+              <div class="h5 mb-0" id="final-score">0.0</div>
+            </div>
+            <div class="col-md-4">
+              <div class="small text-muted">Статус</div>
+              <div class="h5 mb-0" id="final-status">—</div>
+            </div>
+          </div>
+        </div>
+
+        <h6 class="mb-2">Сценарный анализ «если так / если сяк»</h6>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Сценарий</th>
+                <th>РК1</th>
+                <th>РК2</th>
+                <th>Экзамен</th>
+                <th>Итог</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Пессимистичный</td>
+                <td id="sc-low-rk1">-</td>
+                <td id="sc-low-rk2">-</td>
+                <td id="sc-low-exam">-</td>
+                <td id="sc-low-final">-</td>
+              </tr>
+              <tr>
+                <td>Базовый</td>
+                <td id="sc-base-rk1">-</td>
+                <td id="sc-base-rk2">-</td>
+                <td id="sc-base-exam">-</td>
+                <td id="sc-base-final">-</td>
+              </tr>
+              <tr>
+                <td>Оптимистичный</td>
+                <td id="sc-high-rk1">-</td>
+                <td id="sc-high-rk2">-</td>
+                <td id="sc-high-exam">-</td>
+                <td id="sc-high-final">-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <small class="text-muted d-block mt-3">
+          Примечание: на разных кафедрах веса могут отличаться. Калькулятор позволяет подстроить формулу под конкретный силлабус.
+        </small>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% if selected_course %}
+<script>
+  (function () {
+    const ids = [
+      "calc-tk", "calc-rk1", "calc-rk2", "calc-exam",
+      "w-tk", "w-rk1", "w-rk2", "w-admission", "w-exam"
+    ];
+    const getNum = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return 0;
+      const v = Number(el.value);
+      if (Number.isNaN(v)) return 0;
+      return Math.max(0, Math.min(100, v));
+    };
+    const fmt = (v) => Number(v).toFixed(1);
+    const clamp = (v) => Math.max(0, Math.min(100, v));
+
+    function calculateFinal(tk, rk1, rk2, exam) {
+      const wTk = getNum("w-tk");
+      const wRk1 = getNum("w-rk1");
+      const wRk2 = getNum("w-rk2");
+      const wAdmission = getNum("w-admission");
+      const wExam = getNum("w-exam");
+
+      const sumAdmissionWeights = (wTk + wRk1 + wRk2) || 1;
+      const sumFinalWeights = (wAdmission + wExam) || 1;
+
+      const admission = (
+        tk * (wTk / sumAdmissionWeights) +
+        rk1 * (wRk1 / sumAdmissionWeights) +
+        rk2 * (wRk2 / sumAdmissionWeights)
+      );
+      const finalScore = (
+        admission * (wAdmission / sumFinalWeights) +
+        exam * (wExam / sumFinalWeights)
+      );
+      return { admission: clamp(admission), finalScore: clamp(finalScore) };
+    }
+
+    function letterByScore(score) {
+      if (score >= 90) return "A";
+      if (score >= 80) return "B";
+      if (score >= 70) return "C";
+      if (score >= 60) return "D";
+      return "F";
+    }
+
+    function renderScenario(prefix, rk1, rk2, exam, finalScore) {
+      document.getElementById(`${prefix}-rk1`).textContent = fmt(rk1);
+      document.getElementById(`${prefix}-rk2`).textContent = fmt(rk2);
+      document.getElementById(`${prefix}-exam`).textContent = fmt(exam);
+      document.getElementById(`${prefix}-final`).textContent = `${fmt(finalScore)} (${letterByScore(finalScore)})`;
+    }
+
+    function update() {
+      const tk = getNum("calc-tk");
+      const rk1 = getNum("calc-rk1");
+      const rk2 = getNum("calc-rk2");
+      const exam = getNum("calc-exam");
+
+      const base = calculateFinal(tk, rk1, rk2, exam);
+      const low = calculateFinal(tk, clamp(rk1 - 10), clamp(rk2 - 10), clamp(exam - 10));
+      const high = calculateFinal(tk, clamp(rk1 + 10), clamp(rk2 + 10), clamp(exam + 10));
+
+      const admissionEl = document.getElementById("admission-score");
+      const finalEl = document.getElementById("final-score");
+      const statusEl = document.getElementById("final-status");
+      if (admissionEl) admissionEl.textContent = fmt(base.admission);
+      if (finalEl) finalEl.textContent = `${fmt(base.finalScore)} (${letterByScore(base.finalScore)})`;
+      if (statusEl) {
+        const admitted = base.admission >= 50;
+        statusEl.textContent = admitted ? "Допуск есть" : "Риск недопуска";
+        statusEl.className = admitted ? "h5 mb-0 text-success" : "h5 mb-0 text-danger";
+      }
+
+      renderScenario("sc-low", clamp(rk1 - 10), clamp(rk2 - 10), clamp(exam - 10), low.finalScore);
+      renderScenario("sc-base", rk1, rk2, exam, base.finalScore);
+      renderScenario("sc-high", clamp(rk1 + 10), clamp(rk2 + 10), clamp(exam + 10), high.finalScore);
+    }
+
+    const fillBtn = document.getElementById("fill-factual-btn");
+    if (fillBtn) {
+      fillBtn.addEventListener("click", function () {
+        const setValue = (id, dataKey) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const raw = fillBtn.dataset[dataKey];
+          const v = Number(raw);
+          if (!Number.isNaN(v)) el.value = v.toFixed(1);
+        };
+        setValue("calc-tk", "tk");
+        setValue("calc-rk1", "rk1");
+        setValue("calc-rk2", "rk2");
+        setValue("calc-exam", "exam");
+        update();
+      });
+    }
+
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("input", update);
+    });
+    update();
+  })();
+</script>
+{% endif %}
 {% endblock %}

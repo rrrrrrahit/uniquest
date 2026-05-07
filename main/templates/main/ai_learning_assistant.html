@@ -1,13 +1,39 @@
 {% extends 'main/base.html' %}
 {% load dict_filters %}
-{% block title %}Умный ИИ-ассистент обучения{% endblock %}
+{% block title %}Центр академической аналитики{% endblock %}
 
 {% block content %}
 <div class="py-3">
   <div class="row mb-4 reveal">
     <div class="col-12">
-      <h2 class="mb-1"><i class="fas fa-brain text-primary me-2"></i>ИИ-ассистент обучения</h2>
-      <p class="text-muted mb-0">Краткая аналитика по учебному профилю, рискам и плану подготовки.</p>
+      <h2 class="mb-1"><i class="fas fa-chart-pie text-primary me-2"></i>Центр академической аналитики</h2>
+      <p class="text-muted mb-0">Риск-скоринг, индекс устойчивости, приоритет вмешательства и персональные действия по каждой дисциплине.</p>
+    </div>
+  </div>
+
+  <div class="card mb-4 border-0 shadow-sm reveal">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="kpi-box">
+            <div class="kpi-title">Индекс академической устойчивости</div>
+            <div class="kpi-value">{{ overall_stability }}%</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="kpi-box">
+            <div class="kpi-title">Курсов в зоне риска</div>
+            <div class="kpi-value">{{ courses_at_risk }}</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="kpi-box">
+            <div class="kpi-title">Контур мониторинга</div>
+            <div class="kpi-value fs-6">САПА + оценки + ML</div>
+          </div>
+        </div>
+      </div>
+      <small class="text-muted d-block mt-3">Нововведение UniQuest: приоритет вмешательства рассчитывается автоматически и показывает, в какой курс нужно вмешаться в первую очередь.</small>
     </div>
   </div>
 
@@ -55,6 +81,57 @@
   {% endif %}
 
   {% if student_courses %}
+  {% if course_analytics %}
+  <div class="card mb-4 reveal">
+    <div class="card-header">
+      <h5 class="mb-0">Матрица академического риска по дисциплинам</h5>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Дисциплина</th>
+              <th>Устойчивость</th>
+              <th>Приоритет вмешательства</th>
+              <th>Уровень риска</th>
+              <th>Триггеры</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in course_analytics %}
+            <tr>
+              <td><strong>{{ item.course.name }}</strong></td>
+              <td>{{ item.stability_index }}%</td>
+              <td>
+                <div class="progress" style="height: 8px;">
+                  <div class="progress-bar {% if item.intervention_priority >= 60 %}bg-danger{% elif item.intervention_priority >= 40 %}bg-warning{% else %}bg-success{% endif %}" style="width: {{ item.intervention_priority }}%"></div>
+                </div>
+                <small class="text-muted">{{ item.intervention_priority }}%</small>
+              </td>
+              <td>
+                <span class="badge {% if item.risk_level == 'critical' %}bg-danger{% elif item.risk_level == 'high' %}bg-warning text-dark{% elif item.risk_level == 'medium' %}bg-info text-dark{% else %}bg-success{% endif %}">
+                  {{ item.risk_label }}
+                </span>
+              </td>
+              <td>
+                {% if item.risk_factors %}
+                  {% for factor in item.risk_factors %}
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1">{{ factor }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">Стабильно</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="row g-4">
     {% for course in student_courses %}
     <div class="col-lg-6 reveal">
@@ -63,12 +140,13 @@
           <h5 class="mb-0">{{ course.name }}</h5>
         </div>
         <div class="card-body pb-0">
-          <p class="text-muted small mb-0">Выберите раздел ниже: прогноз, план подготовки, рекомендации.</p>
+          <p class="text-muted small mb-0">Прогноз, план и предиктивная аналитика риска по дисциплине.</p>
         </div>
         <div class="card-body">
           <details open>
             <summary class="fw-semibold mb-3">Детали по дисциплине</summary>
           {% with prediction=exam_predictions|get_item:course.id %}
+          {% with analytics=analytics_by_course_id|get_item:course.id %}
           {% if prediction %}
           <div class="row g-2 mb-3">
             <div class="col-6">
@@ -84,10 +162,41 @@
               </div>
             </div>
           </div>
-          {% if prediction.risk_factors %}
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <span class="badge {% if prediction.model_source == 'trained_ml' %}bg-primary{% else %}bg-secondary{% endif %}">
+              Источник модели: {{ prediction.model_source_label }}
+            </span>
+            <span class="badge bg-dark-subtle text-dark border">Confidence: {{ prediction.confidence }}%</span>
+            {% if prediction.data_completeness != None %}
+            <span class="badge bg-info-subtle text-info-emphasis border">Полнота данных: {{ prediction.data_completeness|floatformat:1 }}%</span>
+            {% endif %}
+            {% if prediction.volatility != None %}
+            <span class="badge bg-warning-subtle text-warning-emphasis border">Волатильность: {{ prediction.volatility|floatformat:2 }}</span>
+            {% endif %}
+          </div>
+
+          {% if analytics %}
+          <div class="mb-3">
+            <p class="mb-1 small"><strong>Факторный вклад в индекс устойчивости:</strong></p>
+            <div class="small text-muted mb-1">Успеваемость: {{ analytics.contribution_avg }} п.</div>
+            <div class="progress mb-2" style="height: 6px;">
+              <div class="progress-bar bg-success" style="width: {{ analytics.contribution_avg }}%"></div>
+            </div>
+            <div class="small text-muted mb-1">Посещаемость: {{ analytics.contribution_attendance }} п.</div>
+            <div class="progress mb-2" style="height: 6px;">
+              <div class="progress-bar bg-info" style="width: {{ analytics.contribution_attendance }}%"></div>
+            </div>
+            <div class="small text-muted mb-1">Прогноз успеха: {{ analytics.contribution_success }} п.</div>
+            <div class="progress" style="height: 6px;">
+              <div class="progress-bar bg-primary" style="width: {{ analytics.contribution_success }}%"></div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if prediction.display_risk_factors %}
             <p class="mb-1 small"><strong>Триггеры риска:</strong></p>
             <div class="mb-3">
-              {% for risk in prediction.risk_factors %}
+              {% for risk in prediction.display_risk_factors %}
                 <span class="badge bg-danger me-1">{{ risk }}</span>
               {% endfor %}
             </div>
@@ -101,6 +210,7 @@
             </div>
           </form>
           {% endif %}
+          {% endwith %}
           {% endwith %}
 
           {% with plan=study_plans|get_item:course.id %}
@@ -140,7 +250,7 @@
   </div>
   {% else %}
   <div class="alert alert-info reveal">
-    Вы не записаны ни на один курс. Добавьте записи, чтобы активировать ИИ-аналитику.
+    Вы не записаны ни на один курс. Добавьте записи, чтобы активировать академическую аналитику.
   </div>
   {% endif %}
 </div>

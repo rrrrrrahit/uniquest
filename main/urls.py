@@ -23,10 +23,12 @@ urlpatterns = [
     path('ai-learning-assistant/plan/<int:course_id>/', views.create_study_plan_view, name='create_study_plan'),
 
     path('course/<int:pk>/', views.course_detail, name='course_detail'),
+    path('quizzes/<int:quiz_id>/take/', views.take_quiz_view, name='take_quiz'),
 
     path('teacher/dashboard/', views.teacher_dashboard, name='teacher_dashboard'),
     path('teacher/courses/', views.teacher_courses, name='teacher_courses'),
     path('teacher/disciplines/<int:pk>/', views.teacher_discipline_detail, name='teacher_discipline_detail'),
+    path('teacher/disciplines/<int:pk>/generate-quiz/', views.generate_lecture_quiz_view, name='generate_lecture_quiz'),
     path('teacher/grades/', views.teacher_grades, name='teacher_grades'),
     path('teacher/schedule/', views.teacher_schedule, name='teacher_schedule'),
     path('teacher/students/<int:student_id>/analysis/', views.teacher_student_analysis, name='teacher_student_analysis'),

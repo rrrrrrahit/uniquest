@@ -8,6 +8,8 @@ from functools import wraps
 from collections import defaultdict
 from datetime import timedelta, datetime, time
 from pathlib import Path
+import random
+import re
 from .forms import (
     UserRegisterForm,
     UserUpdateForm,
@@ -33,6 +35,9 @@ from .models import (
     Lecture,
     Enrollment,
     Attendance,
+    LectureQuiz,
+    LectureQuizQuestion,
+    LectureQuizAttempt,
 )
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
@@ -98,6 +103,78 @@ def _rate_limit_exceeded(request, scope, limit=10, window_seconds=60):
         return True
     cache.set(cache_key, current + 1, timeout=window_seconds)
     return False
+
+
+def _sentence_candidates(source_text: str):
+    text = re.sub(r"\s+", " ", (source_text or "")).strip()
+    if not text:
+        return []
+    parts = re.split(r"(?<=[\.\!\?])\s+", text)
+    candidates = []
+    for part in parts:
+        s = part.strip(" -\t\r\n")
+        if 25 <= len(s) <= 260:
+            candidates.append(s)
+    return candidates
+
+
+def _build_quiz_questions_from_text(source_text: str, question_count: int):
+    candidates = _sentence_candidates(source_text)
+    if len(candidates) < 4:
+        return []
+
+    question_count = max(3, min(question_count, 12, len(candidates)))
+    selected = candidates[:question_count]
+    pool = candidates.copy()
+    rnd = random.Random(42)
+    keyword_pool = []
+    for sentence in candidates:
+        for token in re.findall(r"[A-Za-zА-Яа-яЁёІіҢңҒғҮүҰұҚқӨөҺһ]{5,}", sentence):
+            word = token.strip().lower()
+            if word not in keyword_pool:
+                keyword_pool.append(word)
+    questions = []
+
+    for idx, correct_text in enumerate(selected, start=1):
+        distractors_pool = [s for s in pool if s != correct_text]
+        if len(distractors_pool) < 3:
+            continue
+        distractors = rnd.sample(distractors_pool, 3)
+        options = [correct_text] + distractors
+        rnd.shuffle(options)
+        correct_idx = options.index(correct_text)
+        correct_letter = ["A", "B", "C", "D"][correct_idx]
+        question_text = f"Какое утверждение соответствует материалу лекции? (Вопрос {idx})"
+
+        # Если возможно, генерируем вопрос с ключевым термином (более "умный" формат).
+        sentence_tokens = re.findall(r"[A-Za-zА-Яа-яЁёІіҢңҒғҮүҰұҚқӨөҺһ]{5,}", correct_text)
+        sentence_tokens = [t.lower() for t in sentence_tokens]
+        candidate_terms = [t for t in sentence_tokens if t in keyword_pool]
+        if candidate_terms:
+            term = rnd.choice(candidate_terms)
+            distractor_terms = [t for t in keyword_pool if t != term]
+            if len(distractor_terms) >= 3:
+                term_options = [term] + rnd.sample(distractor_terms, 3)
+                rnd.shuffle(term_options)
+                correct_letter = ["A", "B", "C", "D"][term_options.index(term)]
+                options = [opt.capitalize() for opt in term_options]
+                masked_sentence = re.sub(
+                    rf"\b{re.escape(term)}\b",
+                    "_____",
+                    correct_text,
+                    flags=re.IGNORECASE,
+                )
+                question_text = f"Выберите пропущенный термин в утверждении: «{masked_sentence}»"
+
+        questions.append(
+            {
+                "order": idx,
+                "question_text": question_text,
+                "options": options,
+                "correct_letter": correct_letter,
+            }
+        )
+    return questions
 
 
 def _ensure_registration_reference_data():
@@ -1563,13 +1640,20 @@ def course_detail(request, pk):
     recommendations = Recommendation.objects.filter(submission__assignment__in=assignments)
     schedule = ScheduleEntry.objects.filter(course=course).order_by('weekday', 'start_time')
     lectures = Lecture.objects.filter(course=course).order_by("-created_at")
+    quizzes = LectureQuiz.objects.filter(course=course, is_active=True).select_related("assignment", "lecture")
     
     # Получаем оценки для текущего пользователя (если студент) или все (если преподаватель)
     if user_profile and user_profile.role == Profile.ROLE_TEACHER:
         grades = Grade.objects.filter(course=course).select_related('student').order_by('-date')
+        student_attempts = {}
     else:
         grades = Grade.objects.filter(course=course, student=request.user).order_by('-date')
         recommendations = recommendations.filter(submission__student=request.user)
+        attempts = LectureQuizAttempt.objects.filter(quiz__in=quizzes, student=request.user).select_related("quiz").order_by("-submitted_at")
+        student_attempts = {}
+        for attempt in attempts:
+            if attempt.quiz_id not in student_attempts:
+                student_attempts[attempt.quiz_id] = float(attempt.score)
     
     return render(request, 'main/course_detail.html', {
         'course': course,
@@ -1578,6 +1662,9 @@ def course_detail(request, pk):
         'schedule': schedule,
         'grades': grades,
         'lectures': lectures,
+        'quizzes': quizzes,
+        'student_attempts': student_attempts,
+        'is_teacher_view': bool(user_profile and user_profile.role == Profile.ROLE_TEACHER),
     })
 
 @login_required
@@ -1669,9 +1756,57 @@ def grades_view(request):
 
     selected_course = None
     selected_course_grades = Grade.objects.none()
+    calculator_defaults = {
+        "tk": 70.0,
+        "rk1": 70.0,
+        "rk2": 70.0,
+        "exam": 70.0,
+        "has_factual_data": False,
+    }
     if selected_course_id.isdigit() and int(selected_course_id) in courses_stats:
         selected_course = courses_stats[int(selected_course_id)]["course"]
         selected_course_grades = grades.filter(course_id=selected_course.id).order_by("-date")
+        course_grades_list = list(selected_course_grades)
+
+        def _match_any(text, keywords):
+            s = (text or "").lower()
+            return any(k in s for k in keywords)
+
+        rk1_keywords = ("рк1", "рк 1", "рубеж", "рубежный 1", "рубежный контроль 1")
+        rk2_keywords = ("рк2", "рк 2", "рубежный 2", "рубежный контроль 2")
+        exam_keywords = ("экзамен", "final", "финал", "итог", "сессия")
+
+        rk1_values = []
+        rk2_values = []
+        exam_values = []
+        current_values = []
+
+        for g in course_grades_list:
+            name = f"{getattr(g, 'assignment_name', '')} {getattr(g, 'topic', '')}".strip()
+            value = float(g.value)
+            if _match_any(name, exam_keywords):
+                exam_values.append(value)
+                continue
+            if _match_any(name, rk1_keywords):
+                rk1_values.append(value)
+                continue
+            if _match_any(name, rk2_keywords):
+                rk2_values.append(value)
+                continue
+            current_values.append(value)
+
+        if current_values:
+            calculator_defaults["tk"] = round(sum(current_values) / len(current_values), 1)
+        if rk1_values:
+            calculator_defaults["rk1"] = round(sum(rk1_values) / len(rk1_values), 1)
+        if rk2_values:
+            calculator_defaults["rk2"] = round(sum(rk2_values) / len(rk2_values), 1)
+        if exam_values:
+            calculator_defaults["exam"] = round(sum(exam_values) / len(exam_values), 1)
+
+        calculator_defaults["has_factual_data"] = bool(
+            current_values or rk1_values or rk2_values or exam_values
+        )
 
     return render(request, 'main/grades.html', {
         'grades': grades,
@@ -1681,6 +1816,7 @@ def grades_view(request):
         'selected_course_id': selected_course_id,
         'selected_course': selected_course,
         'selected_course_grades': selected_course_grades,
+        'calculator_defaults': calculator_defaults,
     })
 
 @login_required
@@ -1830,7 +1966,7 @@ def ai_assistant(request):
 @login_required
 @student_required
 def ai_learning_assistant(request):
-    """Революционный ИИ-ассистент для персонализированного обучения"""
+    """Академическая аналитика студента с прогнозом риска и планами вмешательства."""
     try:
         from .ai_learning_service import (
             analyze_learning_style, get_ai_recommendations,
@@ -1875,6 +2011,45 @@ def ai_learning_assistant(request):
         all_recommendations = {}
         exam_predictions = {}
         study_plans = {}
+        course_analytics = []
+        analytics_by_course_id = {}
+
+        def _parse_prediction_metadata(prediction):
+            model_source = "unknown"
+            data_completeness = None
+            volatility = None
+            display_risk_factors = []
+            raw_factors = list(getattr(prediction, "risk_factors", []) or [])
+
+            for factor in raw_factors:
+                if not isinstance(factor, str):
+                    continue
+                if factor.startswith("__MODEL_SOURCE__:"):
+                    model_source = factor.split(":", 1)[1].strip() or "unknown"
+                    continue
+                if factor.startswith("__DATA_COMPLETENESS__:"):
+                    try:
+                        data_completeness = float(factor.split(":", 1)[1].strip())
+                    except Exception:
+                        data_completeness = None
+                    continue
+                if factor.startswith("__VOLATILITY__:"):
+                    try:
+                        volatility = float(factor.split(":", 1)[1].strip())
+                    except Exception:
+                        volatility = None
+                    continue
+                display_risk_factors.append(factor)
+
+            if model_source == "unknown":
+                model_source = "trained_ml" if Path("models/grade_model.pkl").exists() else "fallback"
+
+            prediction.model_source = model_source
+            prediction.model_source_label = "Trained ML Pipeline" if model_source == "trained_ml" else "Fallback Model"
+            prediction.data_completeness = data_completeness
+            prediction.volatility = volatility
+            prediction.display_risk_factors = display_risk_factors
+            return prediction
         
         for course in student_courses:
             try:
@@ -1892,6 +2067,7 @@ def ai_learning_assistant(request):
                     student=user, course=course
                 ).order_by('-created_at').first()
                 if prediction:
+                    prediction = _parse_prediction_metadata(prediction)
                     exam_predictions[course.id] = prediction
             except Exception:
                 pass
@@ -1906,6 +2082,95 @@ def ai_learning_assistant(request):
             except Exception:
                 pass
 
+            # Явная аналитика по дисциплине: индекс, уровень риска, приоритет вмешательства.
+            try:
+                grades_qs = Grade.objects.filter(student=user, course=course)
+                avg_grade = float(grades_qs.aggregate(avg=Avg("value"))["avg"] or 0.0)
+
+                attendance_rate = 0.0
+                if student_obj:
+                    enr = Enrollment.objects.filter(student=student_obj, course=course).first()
+                    if enr:
+                        att_qs = Attendance.objects.filter(enrollment=enr)
+                        total_att = att_qs.count()
+                        present_att = att_qs.filter(present=True).count()
+                        attendance_rate = (present_att * 100.0 / total_att) if total_att else 0.0
+
+                prediction_obj = exam_predictions.get(course.id)
+                success_probability = float(getattr(prediction_obj, "success_probability", 0.0) or 0.0)
+                predicted_score = float(getattr(prediction_obj, "predicted_score", 0.0) or 0.0)
+
+                # Индекс академической устойчивости 0..100
+                # Опора на наблюдаемые метрики: факт оценок, посещаемость и прогноз.
+                stability_index = (
+                    avg_grade * 0.45
+                    + attendance_rate * 0.30
+                    + success_probability * 0.25
+                )
+                stability_index = max(0.0, min(100.0, stability_index))
+
+                if stability_index < 45:
+                    risk_level = "critical"
+                    risk_label = "Критический"
+                elif stability_index < 60:
+                    risk_level = "high"
+                    risk_label = "Высокий"
+                elif stability_index < 75:
+                    risk_level = "medium"
+                    risk_label = "Средний"
+                else:
+                    risk_level = "low"
+                    risk_label = "Низкий"
+
+                intervention_priority = min(100.0, max(0.0, 100.0 - stability_index))
+
+                risk_factors = []
+                if avg_grade and avg_grade < 70:
+                    risk_factors.append("Средний балл ниже 70")
+                if attendance_rate and attendance_rate < 75:
+                    risk_factors.append("Посещаемость ниже 75%")
+                if success_probability and success_probability < 70:
+                    risk_factors.append("Вероятность успеха ниже 70%")
+
+                contribution_avg = avg_grade * 0.45
+                contribution_attendance = attendance_rate * 0.30
+                contribution_success = success_probability * 0.25
+
+                prediction_meta = exam_predictions.get(course.id)
+                model_source = getattr(prediction_meta, "model_source", "unknown")
+                model_source_label = getattr(
+                    prediction_meta,
+                    "model_source_label",
+                    "Trained ML Pipeline" if Path("models/grade_model.pkl").exists() else "Fallback Model",
+                )
+                data_completeness = getattr(prediction_meta, "data_completeness", None)
+                volatility = getattr(prediction_meta, "volatility", None)
+
+                analytics_item = {
+                    "course": course,
+                    "avg_grade": avg_grade,
+                    "attendance_rate": attendance_rate,
+                    "success_probability": success_probability,
+                    "predicted_score": predicted_score,
+                    "stability_index": round(stability_index, 1),
+                    "intervention_priority": round(intervention_priority, 1),
+                    "risk_level": risk_level,
+                    "risk_label": risk_label,
+                    "risk_factors": risk_factors,
+                    "model_source": model_source,
+                    "model_source_label": model_source_label,
+                    "data_completeness": data_completeness,
+                    "volatility": volatility,
+                    "contribution_avg": round(contribution_avg, 1),
+                    "contribution_attendance": round(contribution_attendance, 1),
+                    "contribution_success": round(contribution_success, 1),
+                }
+                course_analytics.append(analytics_item)
+                analytics_by_course_id[course.id] = analytics_item
+            except Exception:
+                # Не роняем страницу, если по отдельному курсу данных недостаточно.
+                continue
+
         # Сводный фактор посещаемости на уровне остальных факторов профиля
         attendance_profile = None
         try:
@@ -1917,6 +2182,23 @@ def ai_learning_assistant(request):
         except Exception:
             attendance_profile = None
 
+        if course_analytics:
+            analytics_sorted = sorted(
+                course_analytics,
+                key=lambda item: item["intervention_priority"],
+                reverse=True,
+            )
+            overall_stability = round(
+                sum(item["stability_index"] for item in course_analytics) / len(course_analytics), 1
+            )
+            courses_at_risk = sum(
+                1 for item in course_analytics if item["risk_level"] in ("critical", "high")
+            )
+        else:
+            analytics_sorted = []
+            overall_stability = 0.0
+            courses_at_risk = 0
+
         return render(request, 'main/ai_learning_assistant.html', {
             'learning_profile': learning_profile,
             'student_courses': student_courses,
@@ -1924,6 +2206,10 @@ def ai_learning_assistant(request):
             'exam_predictions': exam_predictions,
             'study_plans': study_plans,
             'attendance_profile': attendance_profile,
+            'course_analytics': analytics_sorted,
+            'analytics_by_course_id': analytics_by_course_id,
+            'overall_stability': overall_stability,
+            'courses_at_risk': courses_at_risk,
         })
     except Exception as e:
         import logging
@@ -1937,6 +2223,10 @@ def ai_learning_assistant(request):
             'exam_predictions': {},
             'study_plans': {},
             'attendance_profile': None,
+            'course_analytics': [],
+            'analytics_by_course_id': {},
+            'overall_stability': 0.0,
+            'courses_at_risk': 0,
         })
 
 
@@ -2366,6 +2656,33 @@ def teacher_discipline_detail(request, pk: int):
         {"week": week, "lectures": items}
         for week, items in sorted(weekly_materials.items(), key=lambda x: x[0], reverse=True)
     ]
+    generated_quizzes = LectureQuiz.objects.filter(course=course).select_related("lecture", "assignment")
+    quiz_stats = []
+    for quiz in generated_quizzes:
+        attempts = list(quiz.attempts.all())
+        attempts_count = len(attempts)
+        avg_score = round(sum(float(a.score) for a in attempts) / attempts_count, 2) if attempts_count else 0.0
+        question_stats = []
+        for q in quiz.questions.all():
+            total = 0
+            correct = 0
+            for attempt in attempts:
+                selected = (attempt.answers or {}).get(str(q.id))
+                if selected:
+                    total += 1
+                    if selected == q.correct_option:
+                        correct += 1
+            success_rate = (correct * 100.0 / total) if total else 0.0
+            question_stats.append({"question": q, "success_rate": round(success_rate, 1), "answered": total})
+        hardest_questions = sorted(question_stats, key=lambda x: x["success_rate"])[:3]
+        quiz_stats.append(
+            {
+                "quiz": quiz,
+                "attempts_count": attempts_count,
+                "avg_score": avg_score,
+                "hardest_questions": hardest_questions,
+            }
+        )
     return render(
         request,
         "main/teacher_discipline_detail.html",
@@ -2373,6 +2690,206 @@ def teacher_discipline_detail(request, pk: int):
             "course": course,
             "lecture_form": lecture_form,
             "grouped_weeks": grouped_weeks,
+            "generated_quizzes": generated_quizzes,
+            "quiz_stats": quiz_stats,
+        },
+    )
+
+
+@login_required
+@teacher_required
+def generate_lecture_quiz_view(request, pk: int):
+    course = get_object_or_404(Course, pk=pk, teacher=request.user)
+    if request.method != "POST":
+        return redirect("teacher_discipline_detail", pk=course.id)
+
+    lecture_id = (request.POST.get("lecture_id") or "").strip()
+    quiz_title = (request.POST.get("quiz_title") or "").strip() or f"Тест по дисциплине {course.name}"
+    source_text = (request.POST.get("source_text") or "").strip()
+    try:
+        question_count = int(request.POST.get("question_count") or 5)
+    except Exception:
+        question_count = 5
+    try:
+        max_attempts = int(request.POST.get("max_attempts") or 1)
+    except Exception:
+        max_attempts = 1
+    try:
+        time_limit_minutes = int(request.POST.get("time_limit_minutes") or 20)
+    except Exception:
+        time_limit_minutes = 20
+    question_count = max(3, min(12, question_count))
+    max_attempts = max(1, min(10, max_attempts))
+    time_limit_minutes = max(5, min(180, time_limit_minutes))
+
+    lecture = None
+    if lecture_id.isdigit():
+        lecture = Lecture.objects.filter(id=int(lecture_id), course=course).first()
+        if lecture and not source_text:
+            source_text = (lecture.content_text or "").strip()
+
+    if not source_text:
+        messages.error(request, "Добавьте текст для генерации теста или выберите лекцию с текстовым содержанием.")
+        return redirect("teacher_discipline_detail", pk=course.id)
+
+    generated_questions = _build_quiz_questions_from_text(source_text, question_count)
+    if len(generated_questions) < 3:
+        messages.error(
+            request,
+            "Недостаточно содержательного текста для генерации теста. Добавьте больше предложений в материал.",
+        )
+        return redirect("teacher_discipline_detail", pk=course.id)
+
+    assignment = Assignment.objects.create(
+        course=course,
+        title=quiz_title,
+        description="Автоматически сгенерированный тест по материалу лекции.",
+        due_date=timezone.now() + timedelta(days=7),
+        max_score=100,
+        topic=lecture.title if lecture else "Тест по материалу",
+        assignment_type="quiz",
+    )
+    quiz = LectureQuiz.objects.create(
+        course=course,
+        lecture=lecture,
+        assignment=assignment,
+        title=quiz_title,
+        source_text=source_text[:12000],
+        generated_by=request.user,
+        question_count=len(generated_questions),
+        max_attempts=max_attempts,
+        time_limit_minutes=time_limit_minutes,
+        is_active=True,
+    )
+    for q in generated_questions:
+        LectureQuizQuestion.objects.create(
+            quiz=quiz,
+            question_text=q["question_text"],
+            option_a=q["options"][0],
+            option_b=q["options"][1],
+            option_c=q["options"][2],
+            option_d=q["options"][3],
+            correct_option=q["correct_letter"],
+            order=q["order"],
+        )
+
+    messages.success(
+        request,
+        f"Тест «{quiz.title}» создан: {len(generated_questions)} вопросов. Студенты уже могут проходить его в курсе.",
+    )
+    return redirect("teacher_discipline_detail", pk=course.id)
+
+
+@login_required
+@student_required
+def take_quiz_view(request, quiz_id: int):
+    quiz = get_object_or_404(
+        LectureQuiz.objects.select_related("course", "assignment"),
+        id=quiz_id,
+        is_active=True,
+    )
+    has_access = Enrollment.objects.filter(student__user=request.user, course=quiz.course).exists()
+    if not has_access:
+        messages.error(request, "Тест доступен только студентам, записанным на дисциплину.")
+        return redirect("dashboard")
+
+    attempts_count = LectureQuizAttempt.objects.filter(quiz=quiz, student=request.user).count()
+    if attempts_count >= quiz.max_attempts:
+        messages.error(request, "Лимит попыток исчерпан для этого теста.")
+        return redirect("course_detail", pk=quiz.course.id)
+
+    questions = list(quiz.questions.all().order_by("order", "id"))
+    rnd = random.Random(f"{quiz.id}:{request.user.id}")
+    rnd.shuffle(questions)
+
+    options_by_question = {}
+    for q in questions:
+        opts = [
+            ("A", q.option_a),
+            ("B", q.option_b),
+            ("C", q.option_c),
+            ("D", q.option_d),
+        ]
+        rnd.shuffle(opts)
+        options_by_question[q.id] = opts
+
+    start_key = f"quiz_start_{quiz.id}_{request.user.id}"
+    if request.method == "GET":
+        request.session[start_key] = timezone.now().isoformat()
+        request.session.modified = True
+
+    if request.method == "POST":
+        started_at_raw = request.session.get(start_key)
+        if started_at_raw:
+            try:
+                started_at = datetime.fromisoformat(started_at_raw)
+                if timezone.is_naive(started_at):
+                    started_at = timezone.make_aware(started_at)
+                elapsed_minutes = (timezone.now() - started_at).total_seconds() / 60.0
+                if elapsed_minutes > quiz.time_limit_minutes:
+                    messages.error(request, "Время на выполнение теста истекло. Попытка не засчитана.")
+                    return redirect("course_detail", pk=quiz.course.id)
+            except Exception:
+                pass
+
+        answers = {}
+        correct = 0
+        for question in questions:
+            key = f"q_{question.id}"
+            selected = (request.POST.get(key) or "").strip().upper()
+            if selected in {"A", "B", "C", "D"}:
+                answers[str(question.id)] = selected
+                if selected == question.correct_option:
+                    correct += 1
+        total = len(questions)
+        score = round((correct * 100.0 / total), 2) if total else 0.0
+
+        LectureQuizAttempt.objects.create(
+            quiz=quiz,
+            student=request.user,
+            score=score,
+            total_questions=total,
+            answers=answers,
+        )
+
+        enrollment = Enrollment.objects.filter(student__user=request.user, course=quiz.course).first()
+        existing_grade = Grade.objects.filter(
+            student=request.user,
+            course=quiz.course,
+            assignment=quiz.assignment,
+        ).first()
+        if existing_grade:
+            existing_grade.value = score
+            existing_grade.topic = f"Тест: {quiz.title}"
+            existing_grade.comment = f"Автооценка: {correct}/{total} правильных ответов."
+            existing_grade.date = timezone.now()
+            existing_grade.assignment_name = quiz.assignment.title
+            existing_grade.enrollment = enrollment
+            existing_grade.save()
+        else:
+            Grade.objects.create(
+                student=request.user,
+                course=quiz.course,
+                enrollment=enrollment,
+                assignment=quiz.assignment,
+                assignment_name=quiz.assignment.title,
+                value=score,
+                topic=f"Тест: {quiz.title}",
+                comment=f"Автооценка: {correct}/{total} правильных ответов.",
+                date=timezone.now(),
+            )
+
+        messages.success(request, f"Тест завершён. Результат: {score}%. Оценка сохранена в журнал.")
+        return redirect("course_detail", pk=quiz.course.id)
+
+    return render(
+        request,
+        "main/take_quiz.html",
+        {
+            "quiz": quiz,
+            "questions": questions,
+            "options_by_question": options_by_question,
+            "attempts_left": max(0, quiz.max_attempts - attempts_count),
         },
     )
 

@@ -35,6 +35,48 @@
         </form>
       </div>
     </div>
+    <div class="card mt-4">
+      <div class="card-header">
+        <h5 class="mb-0">Создать тест из лекции</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{% url 'generate_lecture_quiz' course.id %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label">Источник: лекция</label>
+            <select name="lecture_id" class="form-select">
+              <option value="">Выберите лекцию (или вставьте текст ниже)</option>
+              {% for block in grouped_weeks %}
+                {% for lecture in block.lectures %}
+                  <option value="{{ lecture.id }}">{{ lecture.title }} ({{ lecture.created_at|date:"d.m.Y" }})</option>
+                {% endfor %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Или вставьте текст лекции</label>
+            <textarea name="source_text" class="form-control" rows="5" placeholder="Вставьте фрагмент лекции для генерации вопросов..."></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Название теста</label>
+            <input type="text" name="quiz_title" class="form-control" placeholder="Например: Рубежный тест по теме 3">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Количество вопросов</label>
+            <input type="number" name="question_count" class="form-control" min="3" max="12" value="5">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Лимит попыток на студента</label>
+            <input type="number" name="max_attempts" class="form-control" min="1" max="10" value="1">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Лимит времени (минут)</label>
+            <input type="number" name="time_limit_minutes" class="form-control" min="5" max="180" value="20">
+          </div>
+          <button class="btn btn-primary w-100" type="submit">Сгенерировать тест</button>
+        </form>
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-8">
@@ -75,6 +117,43 @@
           {% endfor %}
         {% else %}
           <div class="text-muted">Материалов по этой дисциплине пока нет.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card mt-4">
+      <div class="card-header">
+        <h5 class="mb-0">Сгенерированные тесты</h5>
+      </div>
+      <div class="card-body">
+        {% if generated_quizzes %}
+          <div class="list-group">
+            {% for stat in quiz_stats %}
+              {% with quiz=stat.quiz %}
+              <div class="list-group-item d-flex justify-content-between align-items-start">
+                <div>
+                  <div class="fw-semibold">{{ quiz.title }}</div>
+                  <div class="small text-muted">
+                    Вопросов: {{ quiz.question_count }} · Создан: {{ quiz.created_at|date:"d.m.Y H:i" }}
+                    {% if quiz.lecture %}· Источник: {{ quiz.lecture.title }}{% endif %}<br>
+                    Попыток: {{ stat.attempts_count }} · Средний балл: {{ stat.avg_score }}%
+                    · Лимит попыток: {{ quiz.max_attempts }} · Таймер: {{ quiz.time_limit_minutes }} мин
+                  </div>
+                  {% if stat.hardest_questions %}
+                  <div class="small text-muted mt-2">
+                    Сложные вопросы:
+                    {% for h in stat.hardest_questions %}
+                      <div>— {{ h.success_rate }}% верных · {{ h.question.question_text|truncatechars:70 }}</div>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
+                </div>
+                <a href="{% url 'course_detail' course.id %}" class="btn btn-sm btn-outline-primary">Открыть в курсе</a>
+              </div>
+              {% endwith %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">Пока нет сгенерированных тестов.</div>
         {% endif %}
       </div>
     </div>

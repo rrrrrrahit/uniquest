@@ -3,6 +3,8 @@
 Включает анализ стиля обучения, предсказание успеха и умное планирование
 """
 import numpy as np
+import math
+from pathlib import Path
 from datetime import timedelta
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
@@ -12,6 +14,128 @@ from .models import (
     SmartLearningProfile, ExamPrediction, PersonalizedStudyPlan,
     Course, Assignment
 )
+
+_GRADE_MODEL_CACHE = None
+
+
+def _safe_ratio(numerator, denominator, default=0.0):
+    return (numerator / denominator) if denominator else default
+
+
+def _sigmoid(x):
+    try:
+        return 1.0 / (1.0 + math.exp(-x))
+    except OverflowError:
+        return 0.0 if x < 0 else 1.0
+
+
+def _load_grade_model_bundle():
+    """
+    Загружает обученную sklearn-модель прогноза оценки (если доступна).
+    Кэшируется в памяти процесса.
+    """
+    global _GRADE_MODEL_CACHE
+    if _GRADE_MODEL_CACHE is not None:
+        return _GRADE_MODEL_CACHE
+
+    model_path = Path("models/grade_model.pkl")
+    if not model_path.exists():
+        _GRADE_MODEL_CACHE = None
+        return None
+    try:
+        import joblib
+
+        bundle = joblib.load(model_path)
+        if isinstance(bundle, dict) and bundle.get("model") and bundle.get("scaler"):
+            _GRADE_MODEL_CACHE = bundle
+            return bundle
+    except Exception:
+        pass
+
+    _GRADE_MODEL_CACHE = None
+    return None
+
+
+def _collect_prediction_features(student, course, enrollment):
+    """
+    Формирует расширенный набор признаков для предиктивной аналитики.
+    """
+    grades = Grade.objects.filter(student=student, course=course).order_by("date")
+    current_avg = float(grades.aggregate(avg=Avg("value"))["avg"] or 70.0)
+
+    # Посещаемость.
+    try:
+        attendances = Attendance.objects.filter(enrollment=enrollment)
+        total_lectures = Lecture.objects.filter(course=course).count()
+        attended = attendances.filter(present=True).count()
+        attendance_rate = _safe_ratio(attended * 100.0, total_lectures, default=70.0)
+    except Exception:
+        attendance_rate = 70.0
+
+    # Выполнение заданий.
+    try:
+        assignments = Assignment.objects.filter(course=course)
+        assignments_count = assignments.count()
+        submissions_count = 0
+        for assignment in assignments:
+            try:
+                if hasattr(assignment, "submissions") and assignment.submissions.filter(student=student).exists():
+                    submissions_count += 1
+            except Exception:
+                continue
+        assignment_completion = _safe_ratio(submissions_count * 100.0, assignments_count, default=70.0)
+    except Exception:
+        assignment_completion = 70.0
+        assignments_count = 0
+        submissions_count = 0
+
+    # Тренд и волатильность по последним оценкам.
+    score_series = [float(g.value) for g in grades]
+    if len(score_series) >= 3:
+        recent_scores = score_series[-5:]
+        trend = float(np.polyfit(range(len(recent_scores)), recent_scores, 1)[0])
+        volatility = float(np.std(recent_scores))
+    else:
+        trend = 0.0
+        volatility = 0.0
+
+    # Признаки под сохраненную модель train_grade_model.
+    hw_avg = grades.filter(
+        Q(assignment_name__icontains="Домаш")
+        | Q(assignment_name__icontains="Homework")
+        | Q(assignment_name__icontains="homework")
+    ).aggregate(avg=Avg("value"))["avg"]
+    if hw_avg is None:
+        hw_avg = current_avg
+
+    midterm = grades.filter(
+        Q(assignment_name__icontains="Midterm")
+        | Q(assignment_name__icontains="Мидтерм")
+        | Q(assignment_name__icontains="Рубеж")
+    ).order_by("-date").first()
+    midterm_score = float(midterm.value) if midterm else float(hw_avg)
+
+    previous_gpa = Grade.objects.filter(student=student).exclude(course=course).aggregate(avg=Avg("value"))["avg"]
+    previous_gpa = float(previous_gpa) if previous_gpa is not None else float(current_avg)
+
+    data_completeness = np.mean([
+        1.0 if grades.count() >= 3 else grades.count() / 3.0,
+        min(1.0, _safe_ratio(assignments_count, 4, default=0.0)),
+        min(1.0, _safe_ratio(Lecture.objects.filter(course=course).count(), 6, default=0.0)),
+    ]) * 100.0
+
+    return {
+        "grades": grades,
+        "current_avg": float(current_avg),
+        "attendance_rate": float(attendance_rate),
+        "assignment_completion": float(assignment_completion),
+        "trend": float(trend),
+        "volatility": float(volatility),
+        "hw_avg": float(hw_avg),
+        "midterm_score": float(midterm_score),
+        "previous_gpa": float(previous_gpa),
+        "data_completeness": float(max(0.0, min(100.0, data_completeness))),
+    }
 
 
 def analyze_learning_style(student):
@@ -145,65 +269,60 @@ def predict_exam_success(student, course, exam_date=None):
     if not enrollment:
         return None
     
-    # Собираем признаки для модели
-    grades = Grade.objects.filter(student=student, course=course)
-    current_avg = float(grades.aggregate(avg=Avg('value'))['avg'] or 70)
-    
-    # Посещаемость
-    try:
-        attendances = Attendance.objects.filter(
-            enrollment=enrollment
-        )
-        total_lectures = Lecture.objects.filter(course=course).count()
-        attended = attendances.filter(present=True).count()
-        attendance_rate = (attended / total_lectures * 100) if total_lectures > 0 else 70
-    except Exception:
-        attendance_rate = 75  # По умолчанию
-    
-    # Выполнение заданий
-    try:
-        assignments = Assignment.objects.filter(course=course)
-        submissions_count = 0
-        for assignment in assignments:
-            try:
-                if hasattr(assignment, 'submissions') and assignment.submissions.filter(student=student).exists():
-                    submissions_count += 1
-            except Exception:
-                pass
-        assignment_completion = (submissions_count / assignments.count() * 100) if assignments.count() > 0 else 70
-    except Exception:
-        assignment_completion = 75  # По умолчанию
-    
-    # Тренд оценок
-    if grades.count() >= 3:
-        recent_scores = [float(g.value) for g in grades.order_by('-date')[:5]]
-        trend = np.polyfit(range(len(recent_scores)), recent_scores, 1)[0]
-    else:
-        trend = 0
-    
-    # ML модель (упрощенная, но эффективная)
-    # Веса признаков
-    w_avg = 0.4
-    w_attendance = 0.25
-    w_completion = 0.2
-    w_trend = 0.15
-    
-    # Нормализация
-    normalized_avg = current_avg / 100
-    normalized_attendance = attendance_rate / 100
-    normalized_completion = assignment_completion / 100
-    normalized_trend = max(-1, min(1, trend / 10))
-    
-    # Предсказание
-    predicted_score = (
-        normalized_avg * w_avg +
-        normalized_attendance * w_attendance +
-        normalized_completion * w_completion +
-        (normalized_trend + 1) / 2 * w_trend
-    ) * 100
-    
-    # Вероятность успеха (>= 60)
-    success_probability = min(100, max(0, (predicted_score - 40) * 2))
+    features = _collect_prediction_features(student, course, enrollment)
+    grades = features["grades"]
+    current_avg = features["current_avg"]
+    attendance_rate = features["attendance_rate"]
+    assignment_completion = features["assignment_completion"]
+    trend = features["trend"]
+    volatility = features["volatility"]
+    data_completeness = features["data_completeness"]
+
+    # 1) Основной предиктор: обученная sklearn-модель (если артефакт доступен)
+    # 2) Fallback: интерпретируемая эвристика с учетом волатильности.
+    predicted_score = None
+    bundle = _load_grade_model_bundle()
+    model_source = "fallback"
+    if bundle:
+        try:
+            model = bundle["model"]
+            scaler = bundle["scaler"]
+            x = np.array([[
+                features["attendance_rate"],
+                features["hw_avg"],
+                features["midterm_score"],
+                features["previous_gpa"],
+            ]], dtype=float)
+            x_scaled = scaler.transform(x)
+            predicted_score = float(model.predict(x_scaled)[0])
+            model_source = "trained_ml"
+        except Exception:
+            predicted_score = None
+
+    if predicted_score is None:
+        normalized_avg = current_avg / 100.0
+        normalized_attendance = attendance_rate / 100.0
+        normalized_completion = assignment_completion / 100.0
+        normalized_trend = max(-1.0, min(1.0, trend / 10.0))
+        normalized_volatility = max(0.0, min(1.0, volatility / 20.0))
+        predicted_score = (
+            normalized_avg * 0.38
+            + normalized_attendance * 0.24
+            + normalized_completion * 0.22
+            + ((normalized_trend + 1.0) / 2.0) * 0.16
+            - normalized_volatility * 0.08
+        ) * 100.0
+        model_source = "fallback"
+
+    predicted_score = max(0.0, min(100.0, predicted_score))
+
+    # Гибридная вероятность успеха:
+    # - логистическое преобразование по запасу к порогу;
+    # - штраф за высокую волатильность.
+    score_margin = (predicted_score - 60.0) / 8.0
+    base_success_prob = _sigmoid(score_margin) * 100.0
+    volatility_penalty = min(18.0, volatility * 0.9)
+    success_probability = max(0.0, min(100.0, base_success_prob - volatility_penalty))
     
     # Определяем факторы риска
     risk_factors = []
@@ -215,6 +334,10 @@ def predict_exam_success(student, course, exam_date=None):
         risk_factors.append("Неполное выполнение заданий")
     if trend < -2:
         risk_factors.append("Снижающаяся успеваемость")
+    if volatility > 12:
+        risk_factors.append("Высокая волатильность оценок")
+    if data_completeness < 60:
+        risk_factors.append("Недостаточная полнота данных")
     
     # Темы для фокуса (слабые темы)
     weak_topics = []
@@ -231,9 +354,18 @@ def predict_exam_success(student, course, exam_date=None):
     
     # Рекомендуемые часы
     difficulty = 100 - predicted_score
-    recommended_hours = max(10, int(difficulty * 0.3))
+    recommended_hours = max(10, int(difficulty * 0.32 + max(0.0, volatility - 8.0) * 0.8))
+
+    # Уверенность зависит от полноты данных и источника модели.
+    model_bonus = 8.0 if bundle else 0.0
+    confidence = max(45.0, min(97.0, 50.0 + data_completeness * 0.35 + model_bonus - volatility * 0.4))
     
     # Создаем или обновляем предсказание
+    risk_factors_with_meta = list(risk_factors)
+    risk_factors_with_meta.insert(0, f"__MODEL_SOURCE__:{model_source}")
+    risk_factors_with_meta.insert(1, f"__DATA_COMPLETENESS__:{round(data_completeness, 1)}")
+    risk_factors_with_meta.insert(2, f"__VOLATILITY__:{round(volatility, 2)}")
+
     prediction, created = ExamPrediction.objects.update_or_create(
         student=student,
         course=course,
@@ -245,8 +377,8 @@ def predict_exam_success(student, course, exam_date=None):
             'assignment_completion': Decimal(str(assignment_completion)),
             'recommended_study_hours': recommended_hours,
             'focus_topics': weak_topics[:5],
-            'risk_factors': risk_factors,
-            'confidence': Decimal('85.0'),  # Уверенность модели
+            'risk_factors': risk_factors_with_meta,
+            'confidence': Decimal(str(round(confidence, 2))),
             'exam_date': exam_date,
         }
     )

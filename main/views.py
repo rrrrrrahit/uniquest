@@ -118,22 +118,98 @@ def _sentence_candidates(source_text: str):
     return candidates
 
 
+_QUIZ_STOPWORDS = {
+    "и", "или", "для", "это", "также", "как", "что", "когда", "если", "при", "над", "под",
+    "the", "and", "for", "with", "from", "into", "that", "this", "which", "where",
+    "они", "она", "оно", "его", "ее", "их", "без", "после", "перед", "через",
+}
+
+
+def _extract_keywords(sentence: str):
+    raw = re.findall(r"[A-Za-zА-Яа-яЁёІіҢңҒғҮүҰұҚқӨөҺһ\-]{4,}", sentence or "")
+    terms = []
+    for token in raw:
+        term = token.strip("-").lower()
+        if len(term) < 4:
+            continue
+        if term in _QUIZ_STOPWORDS:
+            continue
+        if term not in terms:
+            terms.append(term)
+    return terms
+
+
+def _definition_score(sentence: str):
+    s = (sentence or "").lower()
+    score = 0
+    definition_markers = (
+        " это ",
+        " называется ",
+        " определяется ",
+        " представляет собой ",
+        " is ",
+        " are ",
+    )
+    if any(marker in f" {s} " for marker in definition_markers):
+        score += 3
+    if re.search(r"\d", s):
+        score += 2
+    if ":" in s:
+        score += 1
+    return score
+
+
+def _sentence_signature(sentence: str):
+    """
+    Грубая сигнатура смысла для дедупликации похожих вопросов.
+    """
+    terms = _extract_keywords(sentence)
+    if not terms:
+        normalized = re.sub(r"[^a-zA-Zа-яА-ЯёЁ0-9 ]+", " ", sentence or "").lower()
+        return " ".join(normalized.split()[:8])
+    return "|".join(sorted(terms[:8]))
+
+
+def _replace_term_once(text: str, source_term: str, target_term: str):
+    return re.sub(
+        rf"\b{re.escape(source_term)}\b",
+        target_term,
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+
 def _build_quiz_questions_from_text(source_text: str, question_count: int):
     candidates = _sentence_candidates(source_text)
     if len(candidates) < 4:
         return []
 
     question_count = max(3, min(question_count, 12, len(candidates)))
-    selected = candidates[:question_count]
+    # Вначале берём более информативные предложения (с терминами/цифрами).
+    ranked = sorted(candidates, key=lambda s: (_definition_score(s), len(_extract_keywords(s)), len(s)), reverse=True)
+
+    # Берем уникальные по сигнатуре предложения.
+    selected = []
+    seen_signatures = set()
+    for sentence in ranked:
+        sig = _sentence_signature(sentence)
+        if sig in seen_signatures:
+            continue
+        selected.append(sentence)
+        seen_signatures.add(sig)
+        if len(selected) >= question_count:
+            break
     pool = candidates.copy()
     rnd = random.Random(42)
     keyword_pool = []
-    for sentence in candidates:
-        for token in re.findall(r"[A-Za-zА-Яа-яЁёІіҢңҒғҮүҰұҚқӨөҺһ]{5,}", sentence):
+    for sentence in ranked:
+        for token in _extract_keywords(sentence):
             word = token.strip().lower()
             if word not in keyword_pool:
                 keyword_pool.append(word)
     questions = []
+    used_question_signatures = set()
 
     for idx, correct_text in enumerate(selected, start=1):
         distractors_pool = [s for s in pool if s != correct_text]
@@ -146,13 +222,20 @@ def _build_quiz_questions_from_text(source_text: str, question_count: int):
         correct_letter = ["A", "B", "C", "D"][correct_idx]
         question_text = f"Какое утверждение соответствует материалу лекции? (Вопрос {idx})"
 
-        # Если возможно, генерируем вопрос с ключевым термином (более "умный" формат).
-        sentence_tokens = re.findall(r"[A-Za-zА-Яа-яЁёІіҢңҒғҮүҰұҚқӨөҺһ]{5,}", correct_text)
-        sentence_tokens = [t.lower() for t in sentence_tokens]
-        candidate_terms = [t for t in sentence_tokens if t in keyword_pool]
+        # Если возможно, генерируем более "умный" вопрос с термином/фактом.
+        sentence_tokens = _extract_keywords(correct_text)
+        candidate_terms = [t for t in sentence_tokens if t in keyword_pool and len(t) >= 5]
         if candidate_terms:
             term = rnd.choice(candidate_terms)
-            distractor_terms = [t for t in keyword_pool if t != term]
+            # Берём правдоподобные дистракторы: близкая длина + не из того же предложения.
+            distractor_terms = [
+                t for t in keyword_pool
+                if t != term and t not in sentence_tokens and abs(len(t) - len(term)) <= 4
+            ]
+            if len(distractor_terms) < 3:
+                distractor_terms = [t for t in keyword_pool if t != term and t not in sentence_tokens]
+
+            # Тип 1: пропущенный термин.
             if len(distractor_terms) >= 3:
                 term_options = [term] + rnd.sample(distractor_terms, 3)
                 rnd.shuffle(term_options)
@@ -164,11 +247,26 @@ def _build_quiz_questions_from_text(source_text: str, question_count: int):
                     correct_text,
                     flags=re.IGNORECASE,
                 )
-                question_text = f"Выберите пропущенный термин в утверждении: «{masked_sentence}»"
+                question_text = f"Выберите пропущенный термин: «{masked_sentence}»"
+
+            # Тип 2: одно верное утверждение, три правдоподобных искажённых.
+            false_statements = []
+            if len(distractor_terms) >= 3 and len(correct_text) <= 220:
+                for fake_term in rnd.sample(distractor_terms, 3):
+                    false_statements.append(_replace_term_once(correct_text, term, fake_term))
+                options = [correct_text] + false_statements
+                rnd.shuffle(options)
+                correct_letter = ["A", "B", "C", "D"][options.index(correct_text)]
+                question_text = "Выберите верное утверждение по материалу лекции:"
+
+        q_signature = _sentence_signature(question_text + " " + correct_text)
+        if q_signature in used_question_signatures:
+            continue
+        used_question_signatures.add(q_signature)
 
         questions.append(
             {
-                "order": idx,
+                "order": len(questions) + 1,
                 "question_text": question_text,
                 "options": options,
                 "correct_letter": correct_letter,

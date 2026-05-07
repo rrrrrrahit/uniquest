@@ -286,9 +286,6 @@
           <a href="{% url 'profile' %}" class="btn btn-outline-secondary btn-sm">
             <i class="fas fa-user me-2"></i>Профиль
           </a>
-          <a href="{% url 'student_passport' %}" class="btn btn-outline-dark btn-sm">
-            <i class="fas fa-id-card me-2"></i>Паспорт студента
-          </a>
           <a href="{% url 'ai_learning_assistant' %}" class="btn btn-primary btn-sm">
             <i class="fas fa-chart-pie me-2"></i>Центр аналитики риска
           </a>
@@ -385,6 +382,52 @@
 </div>
 {% endif %}
 
+<div class="row mb-4 reveal">
+  <div class="col-12">
+    <div class="card border-primary-subtle">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-list-check me-2"></i>Назначенные тесты</h5>
+        <small class="text-muted">По вашим дисциплинам</small>
+      </div>
+      <div class="card-body">
+        {% if upcoming_quizzes %}
+          <div class="list-group list-group-flush">
+            {% for item in upcoming_quizzes %}
+              <div class="list-group-item px-0 d-flex justify-content-between align-items-start">
+                <div>
+                  <h6 class="mb-1">{{ item.quiz.title }}</h6>
+                  <p class="small text-muted mb-1">
+                    {{ item.quiz.course.name }} · Вопросов: {{ item.quiz.question_count }}
+                    · Лимит: {{ item.quiz.time_limit_minutes }} мин
+                  </p>
+                  {% if item.attempt %}
+                    <p class="small mb-0 text-success">
+                      Последний результат: {{ item.attempt.score }}% · Осталось попыток: {{ item.attempts_left }}
+                    </p>
+                  {% else %}
+                    <p class="small mb-0 text-muted">Вы еще не проходили этот тест.</p>
+                  {% endif %}
+                </div>
+                <div class="ms-3 text-nowrap">
+                  {% if item.is_available %}
+                    <a href="{% url 'take_quiz' item.quiz.id %}" class="btn btn-sm btn-primary">
+                      {% if item.attempt %}Перепройти{% else %}Начать тест{% endif %}
+                    </a>
+                  {% else %}
+                    <span class="badge bg-secondary">Лимит попыток исчерпан</span>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">Пока нет назначенных тестов. Они появятся здесь после публикации преподавателем.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
 {% if recent_documents %}
 <div class="row mb-4 reveal">
   <div class="col-12">
@@ -445,7 +488,6 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="fas fa-book me-2"></i>Мои курсы</h5>
-        <a href="{% url 'student_passport' %}" class="btn btn-sm btn-outline-primary">Аналитика обучения</a>
       </div>
       <div class="card-body">
         {% if courses %}

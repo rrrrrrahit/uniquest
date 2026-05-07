@@ -4,11 +4,53 @@
 <div class="row mb-4 reveal">
   <div class="col-12">
     <h2 class="mb-1">Успеваемость</h2>
-    <p class="text-muted mb-0">Выберите дисциплину и просматривайте баллы по датам с комментариями преподавателя.</p>
+    <p class="text-muted mb-0">Простой журнал оценок: дата, день недели, дисциплина и балл.</p>
   </div>
 </div>
 
 <div class="row g-4">
+  <div class="col-lg-12">
+    <div class="card reveal">
+      <div class="card-header">
+        <h5 class="mb-0">Общий журнал оценок</h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-striped mb-0">
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>День недели</th>
+                <th>Дисциплина</th>
+                <th>Балл</th>
+                <th>Тема</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in all_grades_rows %}
+                <tr>
+                  <td>{{ row.grade.date|date:"d.m.Y" }}</td>
+                  <td>{{ row.weekday }}</td>
+                  <td>
+                    <a href="{% url 'grades' %}?course_id={{ row.grade.course.id }}">{{ row.grade.course.name }}</a>
+                  </td>
+                  <td>
+                    <span class="badge {% if row.grade.value >= 90 %}bg-success{% elif row.grade.value >= 80 %}bg-info{% elif row.grade.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">
+                      {{ row.grade.value }} ({{ row.grade.letter_grade }})
+                    </span>
+                  </td>
+                  <td>{{ row.grade.topic|default:"—" }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5" class="text-muted">Оценок пока нет.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="col-lg-4">
     <div class="card reveal">
       <div class="card-header"><h5 class="mb-0">Дисциплины</h5></div>
@@ -48,21 +90,23 @@
               <thead>
                 <tr>
                   <th>Дата</th>
+                  <th>День недели</th>
                   <th>Балл</th>
                   <th>Тема</th>
                   <th>Комментарий преподавателя</th>
                 </tr>
               </thead>
               <tbody>
-                {% for g in selected_course_grades %}
+                {% for row in selected_course_rows %}
                   <tr>
-                    <td>{{ g.date|date:"d.m.Y" }}</td>
-                    <td><span class="badge {% if g.value >= 90 %}bg-success{% elif g.value >= 80 %}bg-info{% elif g.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">{{ g.value }} ({{ g.letter_grade }})</span></td>
-                    <td>{{ g.topic|default:"—" }}</td>
-                    <td>{{ g.comment|default:"—" }}</td>
+                    <td>{{ row.grade.date|date:"d.m.Y" }}</td>
+                    <td>{{ row.weekday }}</td>
+                    <td><span class="badge {% if row.grade.value >= 90 %}bg-success{% elif row.grade.value >= 80 %}bg-info{% elif row.grade.value >= 70 %}bg-warning{% else %}bg-danger{% endif %}">{{ row.grade.value }} ({{ row.grade.letter_grade }})</span></td>
+                    <td>{{ row.grade.topic|default:"—" }}</td>
+                    <td>{{ row.grade.comment|default:"—" }}</td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="4" class="text-muted">По дисциплине пока нет оценок.</td></tr>
+                  <tr><td colspan="5" class="text-muted">По дисциплине пока нет оценок.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -81,25 +125,20 @@
       </div>
       <div class="card-body">
         <p class="text-muted small mb-3">
-          Модель по умолчанию: <strong>Допуск</strong> = ТК×0.30 + РК1×0.35 + РК2×0.35;
+          Модель по умолчанию: <strong>Допуск</strong> = (РК1 + РК2) / 2;
           <strong>Итог</strong> = Допуск×0.60 + Экзамен×0.40.
-          Вы можете менять веса под правила конкретной дисциплины.
         </p>
 
         <div class="row g-3 mb-3">
-          <div class="col-md-3">
-            <label class="form-label small mb-1">Текущий контроль (ТК)</label>
-            <input type="number" class="form-control form-control-sm calc-input" id="calc-tk" min="0" max="100" step="0.1" value="{{ calculator_defaults.tk|floatformat:1 }}">
-          </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label small mb-1">Рубежный контроль 1 (РК1)</label>
             <input type="number" class="form-control form-control-sm calc-input" id="calc-rk1" min="0" max="100" step="0.1" value="{{ calculator_defaults.rk1|floatformat:1 }}">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label small mb-1">Рубежный контроль 2 (РК2)</label>
             <input type="number" class="form-control form-control-sm calc-input" id="calc-rk2" min="0" max="100" step="0.1" value="{{ calculator_defaults.rk2|floatformat:1 }}">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label small mb-1">Экзамен / сессия</label>
             <input type="number" class="form-control form-control-sm calc-input" id="calc-exam" min="0" max="100" step="0.1" value="{{ calculator_defaults.exam|floatformat:1 }}">
           </div>
@@ -109,7 +148,6 @@
             type="button"
             class="btn btn-sm btn-outline-primary"
             id="fill-factual-btn"
-            data-tk="{{ calculator_defaults.tk|floatformat:1 }}"
             data-rk1="{{ calculator_defaults.rk1|floatformat:1 }}"
             data-rk2="{{ calculator_defaults.rk2|floatformat:1 }}"
             data-exam="{{ calculator_defaults.exam|floatformat:1 }}"
@@ -124,32 +162,6 @@
             В журнале пока мало данных по РК/экзамену — используйте ручной ввод.
             {% endif %}
           </small>
-        </div>
-
-        <div class="row g-3 mb-3">
-          <div class="col-md-4">
-            <label class="form-label small mb-1">Вес ТК в допуске (%)</label>
-            <input type="number" class="form-control form-control-sm calc-weight" id="w-tk" min="0" max="100" step="1" value="30">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small mb-1">Вес РК1 в допуске (%)</label>
-            <input type="number" class="form-control form-control-sm calc-weight" id="w-rk1" min="0" max="100" step="1" value="35">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small mb-1">Вес РК2 в допуске (%)</label>
-            <input type="number" class="form-control form-control-sm calc-weight" id="w-rk2" min="0" max="100" step="1" value="35">
-          </div>
-        </div>
-
-        <div class="row g-3 mb-3">
-          <div class="col-md-6">
-            <label class="form-label small mb-1">Вес допуска в финале (%)</label>
-            <input type="number" class="form-control form-control-sm calc-final" id="w-admission" min="0" max="100" step="1" value="60">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1">Вес экзамена в финале (%)</label>
-            <input type="number" class="form-control form-control-sm calc-final" id="w-exam" min="0" max="100" step="1" value="40">
-          </div>
         </div>
 
         <div class="alert alert-light border mb-3">
@@ -208,7 +220,7 @@
         </div>
 
         <small class="text-muted d-block mt-3">
-          Примечание: на разных кафедрах веса могут отличаться. Калькулятор позволяет подстроить формулу под конкретный силлабус.
+          Простой расчет для быстрого прогноза: только РК1, РК2 и экзамен.
         </small>
       </div>
     </div>
@@ -222,10 +234,7 @@
 {% if selected_course %}
 <script>
   (function () {
-    const ids = [
-      "calc-tk", "calc-rk1", "calc-rk2", "calc-exam",
-      "w-tk", "w-rk1", "w-rk2", "w-admission", "w-exam"
-    ];
+    const ids = ["calc-rk1", "calc-rk2", "calc-exam"];
     const getNum = (id) => {
       const el = document.getElementById(id);
       if (!el) return 0;
@@ -236,25 +245,9 @@
     const fmt = (v) => Number(v).toFixed(1);
     const clamp = (v) => Math.max(0, Math.min(100, v));
 
-    function calculateFinal(tk, rk1, rk2, exam) {
-      const wTk = getNum("w-tk");
-      const wRk1 = getNum("w-rk1");
-      const wRk2 = getNum("w-rk2");
-      const wAdmission = getNum("w-admission");
-      const wExam = getNum("w-exam");
-
-      const sumAdmissionWeights = (wTk + wRk1 + wRk2) || 1;
-      const sumFinalWeights = (wAdmission + wExam) || 1;
-
-      const admission = (
-        tk * (wTk / sumAdmissionWeights) +
-        rk1 * (wRk1 / sumAdmissionWeights) +
-        rk2 * (wRk2 / sumAdmissionWeights)
-      );
-      const finalScore = (
-        admission * (wAdmission / sumFinalWeights) +
-        exam * (wExam / sumFinalWeights)
-      );
+    function calculateFinal(rk1, rk2, exam) {
+      const admission = (rk1 + rk2) / 2;
+      const finalScore = (admission * 0.6) + (exam * 0.4);
       return { admission: clamp(admission), finalScore: clamp(finalScore) };
     }
 
@@ -274,14 +267,13 @@
     }
 
     function update() {
-      const tk = getNum("calc-tk");
       const rk1 = getNum("calc-rk1");
       const rk2 = getNum("calc-rk2");
       const exam = getNum("calc-exam");
 
-      const base = calculateFinal(tk, rk1, rk2, exam);
-      const low = calculateFinal(tk, clamp(rk1 - 10), clamp(rk2 - 10), clamp(exam - 10));
-      const high = calculateFinal(tk, clamp(rk1 + 10), clamp(rk2 + 10), clamp(exam + 10));
+      const base = calculateFinal(rk1, rk2, exam);
+      const low = calculateFinal(clamp(rk1 - 10), clamp(rk2 - 10), clamp(exam - 10));
+      const high = calculateFinal(clamp(rk1 + 10), clamp(rk2 + 10), clamp(exam + 10));
 
       const admissionEl = document.getElementById("admission-score");
       const finalEl = document.getElementById("final-score");
@@ -309,7 +301,6 @@
           const v = Number(raw);
           if (!Number.isNaN(v)) el.value = v.toFixed(1);
         };
-        setValue("calc-tk", "tk");
         setValue("calc-rk1", "rk1");
         setValue("calc-rk2", "rk2");
         setValue("calc-exam", "exam");

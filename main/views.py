@@ -1500,6 +1500,28 @@ def _dashboard_impl(request):
         course__in=courses,
         due_date__gte=timezone.now()
     ).order_by('due_date')[:5]
+    course_ids = [c.id for c in courses if c]
+    quiz_qs = LectureQuiz.objects.filter(
+        course_id__in=course_ids,
+        is_active=True,
+    ).select_related("course", "assignment").order_by("-created_at")
+    quiz_attempts = {
+        a.quiz_id: a
+        for a in LectureQuizAttempt.objects.filter(quiz__in=quiz_qs, student=user).order_by("-submitted_at")
+    }
+    upcoming_quizzes = []
+    for quiz in quiz_qs[:12]:
+        attempt = quiz_attempts.get(quiz.id)
+        attempts_used = LectureQuizAttempt.objects.filter(quiz=quiz, student=user).count()
+        attempts_left = max(0, quiz.max_attempts - attempts_used)
+        upcoming_quizzes.append(
+            {
+                "quiz": quiz,
+                "attempt": attempt,
+                "attempts_left": attempts_left,
+                "is_available": attempts_left > 0,
+            }
+        )
     recent_documents = list(
         _recent_materials_queryset(Lecture.objects.filter(course__in=courses))[:10]
     )
@@ -1510,6 +1532,7 @@ def _dashboard_impl(request):
         'avg_score': avg_score,
         'recent_grades': recent_grades,
         'upcoming_assignments': upcoming_assignments,
+        'upcoming_quizzes': upcoming_quizzes,
         'recent_documents': recent_documents,
         'is_admin_dashboard': False,
     })
@@ -1559,6 +1582,7 @@ def dashboard(request):
                 "avg_score": 0,
                 "recent_grades": [],
                 "upcoming_assignments": [],
+                "upcoming_quizzes": [],
                 "recent_documents": [],
                 "is_admin_dashboard": False,
             },
@@ -1754,10 +1778,29 @@ def grades_view(request):
         stats['avg'] = (sum(numeric) / len(numeric)) if numeric else 0
         stats['grades'] = sorted(stats['grades'], key=lambda g: g.date, reverse=True)
 
+    weekday_map = {
+        0: "Понедельник",
+        1: "Вторник",
+        2: "Среда",
+        3: "Четверг",
+        4: "Пятница",
+        5: "Суббота",
+        6: "Воскресенье",
+    }
+
+    all_grades_rows = []
+    for g in grades:
+        all_grades_rows.append(
+            {
+                "grade": g,
+                "weekday": weekday_map.get(g.date.weekday(), "—") if g.date else "—",
+            }
+        )
+
     selected_course = None
     selected_course_grades = Grade.objects.none()
+    selected_course_rows = []
     calculator_defaults = {
-        "tk": 70.0,
         "rk1": 70.0,
         "rk2": 70.0,
         "exam": 70.0,
@@ -1779,7 +1822,6 @@ def grades_view(request):
         rk1_values = []
         rk2_values = []
         exam_values = []
-        current_values = []
 
         for g in course_grades_list:
             name = f"{getattr(g, 'assignment_name', '')} {getattr(g, 'topic', '')}".strip()
@@ -1793,10 +1835,15 @@ def grades_view(request):
             if _match_any(name, rk2_keywords):
                 rk2_values.append(value)
                 continue
-            current_values.append(value)
 
-        if current_values:
-            calculator_defaults["tk"] = round(sum(current_values) / len(current_values), 1)
+        selected_course_rows = [
+            {
+                "grade": g,
+                "weekday": weekday_map.get(g.date.weekday(), "—") if g.date else "—",
+            }
+            for g in selected_course_grades
+        ]
+
         if rk1_values:
             calculator_defaults["rk1"] = round(sum(rk1_values) / len(rk1_values), 1)
         if rk2_values:
@@ -1805,7 +1852,7 @@ def grades_view(request):
             calculator_defaults["exam"] = round(sum(exam_values) / len(exam_values), 1)
 
         calculator_defaults["has_factual_data"] = bool(
-            current_values or rk1_values or rk2_values or exam_values
+            rk1_values or rk2_values or exam_values
         )
 
     return render(request, 'main/grades.html', {
@@ -1816,6 +1863,8 @@ def grades_view(request):
         'selected_course_id': selected_course_id,
         'selected_course': selected_course,
         'selected_course_grades': selected_course_grades,
+        'selected_course_rows': selected_course_rows,
+        'all_grades_rows': all_grades_rows,
         'calculator_defaults': calculator_defaults,
     })
 
